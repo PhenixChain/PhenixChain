@@ -1,4 +1,5 @@
 .DS_Store
+Gopkg.lock
 vendor/
 phenix/phenix
 phenixcli/phenixcli

@@ -13,10 +13,10 @@
 
 ## Query transaction
 ```
-$ ./phenixcli tx <TX HASH> --chain-id=phenix
+./phenixcli tx <TX HASH> --chain-id=phenix
 ```
 
 ## Query account
 ```
-$ ./phenixcli account <address> --chain-id=phenix
+./phenixcli account <address> --chain-id=phenix
 ```

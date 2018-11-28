@@ -408,15 +408,6 @@
   version = "v0.26.1-rc3"
 
 [[projects]]
-  name = "github.com/tendermint/tmlibs"
-  packages = [
-    "common",
-    "log"
-  ]
-  revision = "49596e0a1f48866603813df843c9409fc19805c6"
-  version = "v0.9.0"
-
-[[projects]]
   name = "github.com/zondax/ledger-goclient"
   packages = ["."]
   revision = "58598458c11bc0ad1c1b8dac3dc3e11eaf270b79"
@@ -535,6 +526,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "50d82aef7492a11a027e388341187fbc2c19dd673940693d3d7b3859b6a7ce31"
+  inputs-digest = "54b6e50c0a144ea6020fa10bfe736e5f201ca0b98991f8d3efd1d7c1b3e817e3"
   solver-name = "gps-cdcl"
   solver-version = 1

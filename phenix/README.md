@@ -1,7 +1,7 @@
 # Luanch Blockchain
 ## Generate genesis file
 ```
-$ ./phenix init
+./phenix init
 ```
 And you should see something like this:
 ```
@@ -15,9 +15,9 @@ And you should see something like this:
 ```
 ## Start up the blockchain
 ```
-$ ./phenix start
+./phenix start
 ```
 ## Reset the blockchain data
 ```
-$ ./phenix unsafe-reset-all
+./phenix unsafe-reset-all
 ```
