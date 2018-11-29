@@ -8,7 +8,7 @@
 
 ## Send transactions
 ```
-./phenixcli send --from=<from address> --amount=6coin1 --to=<to address> --chain-id=phenix
+./phenixcli send --from=<from address> --amount=6mycoin --to=<to address> --chain-id=phenix
 ```
 
 ## Query transaction
