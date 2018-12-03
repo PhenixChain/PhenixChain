@@ -18,7 +18,6 @@ type SignBody struct {
 	LocalAccountName string     `json:"name"`
 	Password         string     `json:"password"`
 	ChainID          string     `json:"chain_id"`
-	AccountNumber    int64      `json:"account_number"`
 	Sequence         int64      `json:"sequence"`
 	AppendSig        bool       `json:"append_sig"`
 }
@@ -42,9 +41,8 @@ func SignTxRequestHandlerFn(cdc *codec.Codec, cliCtx context.CLIContext) http.Ha
 		}
 
 		txBldr := authtxb.TxBuilder{
-			ChainID:       m.ChainID,
-			AccountNumber: m.AccountNumber,
-			Sequence:      m.Sequence,
+			ChainID:  m.ChainID,
+			Sequence: m.Sequence,
 		}
 
 		signedTx, err := txBldr.SignStdTx(m.LocalAccountName, m.Password, m.Tx, m.AppendSig)

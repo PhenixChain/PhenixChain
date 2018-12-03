@@ -124,7 +124,6 @@ type BaseReq struct {
 	Name          string `json:"name"`
 	Password      string `json:"password"`
 	ChainID       string `json:"chain_id"`
-	AccountNumber int64  `json:"account_number"`
 	Sequence      int64  `json:"sequence"`
 	Gas           string `json:"gas"`
 	GasAdjustment string `json:"gas_adjustment"`
@@ -138,7 +137,6 @@ func (br BaseReq) Sanitize() BaseReq {
 		ChainID:       strings.TrimSpace(br.ChainID),
 		Gas:           strings.TrimSpace(br.Gas),
 		GasAdjustment: strings.TrimSpace(br.GasAdjustment),
-		AccountNumber: br.AccountNumber,
 		Sequence:      br.Sequence,
 	}
 }
@@ -219,7 +217,6 @@ func CompleteAndBroadcastTxREST(w http.ResponseWriter, r *http.Request, cliCtx c
 		GasAdjustment: adjustment,
 		SimulateGas:   simulateGas,
 		ChainID:       baseReq.ChainID,
-		AccountNumber: baseReq.AccountNumber,
 		Sequence:      baseReq.Sequence,
 	}
 

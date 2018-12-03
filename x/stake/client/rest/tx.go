@@ -214,7 +214,6 @@ func delegationsRequestHandlerFn(cdc *codec.Codec, kb keys.Keybase, cliCtx conte
 		signedTxs := make([][]byte, len(messages[:]))
 		for i, msg := range messages {
 			// increment sequence for each message
-			txBldr = txBldr.WithAccountNumber(baseReq.AccountNumber)
 			txBldr = txBldr.WithSequence(baseReq.Sequence)
 
 			baseReq.Sequence++

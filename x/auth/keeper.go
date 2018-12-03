@@ -7,8 +7,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 )
 
-var globalAccountNumberKey = []byte("globalAccountNumber")
-
 // This AccountKeeper encodes/decodes accounts using the
 // go-amino (binary) encoding/decoding library.
 type AccountKeeper struct {
@@ -40,21 +38,6 @@ func (am AccountKeeper) NewAccountWithAddress(ctx sdk.Context, addr sdk.AccAddre
 	err := acc.SetAddress(addr)
 	if err != nil {
 		// Handle w/ #870
-		panic(err)
-	}
-	err = acc.SetAccountNumber(am.GetNextAccountNumber(ctx))
-	if err != nil {
-		// Handle w/ #870
-		panic(err)
-	}
-	return acc
-}
-
-// New Account
-func (am AccountKeeper) NewAccount(ctx sdk.Context, acc Account) Account {
-	err := acc.SetAccountNumber(am.GetNextAccountNumber(ctx))
-	if err != nil {
-		// TODO: Handle with #870
 		panic(err)
 	}
 	return acc
@@ -139,26 +122,6 @@ func (am AccountKeeper) setSequence(ctx sdk.Context, addr sdk.AccAddress, newSeq
 	}
 	am.SetAccount(ctx, acc)
 	return nil
-}
-
-// Returns and increments the global account number counter
-func (am AccountKeeper) GetNextAccountNumber(ctx sdk.Context) int64 {
-	var accNumber int64
-	store := ctx.KVStore(am.key)
-	bz := store.Get(globalAccountNumberKey)
-	if bz == nil {
-		accNumber = 0
-	} else {
-		err := am.cdc.UnmarshalBinaryLengthPrefixed(bz, &accNumber)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	bz = am.cdc.MustMarshalBinaryLengthPrefixed(accNumber + 1)
-	store.Set(globalAccountNumberKey, bz)
-
-	return accNumber
 }
 
 //----------------------------------------

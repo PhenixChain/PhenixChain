@@ -90,17 +90,6 @@ func (ctx CLIContext) GetFromName() (string, error) {
 	return ctx.fromName, nil
 }
 
-// GetAccountNumber returns the next account number for the given account
-// address.
-func (ctx CLIContext) GetAccountNumber(address []byte) (int64, error) {
-	account, err := ctx.GetAccount(address)
-	if err != nil {
-		return 0, err
-	}
-
-	return account.GetAccountNumber(), nil
-}
-
 // GetAccountSequence returns the sequence number for the given account
 // address.
 func (ctx CLIContext) GetAccountSequence(address []byte) (int64, error) {

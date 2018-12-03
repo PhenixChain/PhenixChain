@@ -127,14 +127,6 @@ func SignStdTx(txBldr authtxb.TxBuilder, cliCtx context.CLIContext, name string,
 			"The generated transaction's intended signer does not match the given signer: %q", name)
 	}
 
-	if !offline && txBldr.AccountNumber == 0 {
-		accNum, err := cliCtx.GetAccountNumber(addr)
-		if err != nil {
-			return signedStdTx, err
-		}
-		txBldr = txBldr.WithAccountNumber(accNum)
-	}
-
 	if !offline && txBldr.Sequence == 0 {
 		accSeq, err := cliCtx.GetAccountSequence(addr)
 		if err != nil {
@@ -181,16 +173,6 @@ func prepareTxBuilder(txBldr authtxb.TxBuilder, cliCtx context.CLIContext) (auth
 	from, err := cliCtx.GetFromAddress()
 	if err != nil {
 		return txBldr, err
-	}
-
-	// TODO: (ref #1903) Allow for user supplied account number without
-	// automatically doing a manual lookup.
-	if txBldr.AccountNumber == 0 {
-		accNum, err := cliCtx.GetAccountNumber(from)
-		if err != nil {
-			return txBldr, err
-		}
-		txBldr = txBldr.WithAccountNumber(accNum)
 	}
 
 	// TODO: (ref #1903) Allow for user supplied account sequence without

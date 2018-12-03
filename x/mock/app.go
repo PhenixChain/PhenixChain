@@ -153,16 +153,15 @@ func GenTx(msgs []sdk.Msg, accnums []int64, seq []int64, priv ...crypto.PrivKey)
 	memo := "testmemotestmemo"
 
 	for i, p := range priv {
-		sig, err := p.Sign(auth.StdSignBytes(chainID, accnums[i], seq[i], fee, msgs, memo))
+		sig, err := p.Sign(auth.StdSignBytes(chainID, seq[i], fee, msgs, memo))
 		if err != nil {
 			panic(err)
 		}
 
 		sigs[i] = auth.StdSignature{
-			PubKey:        p.PubKey(),
-			Signature:     sig,
-			AccountNumber: accnums[i],
-			Sequence:      seq[i],
+			PubKey:    p.PubKey(),
+			Signature: sig,
+			Sequence:  seq[i],
 		}
 	}
 
