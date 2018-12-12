@@ -527,7 +527,7 @@ func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, mode runTxMode) (re
 	var data []byte   // NOTE: we just append them all (?!)
 	var tags sdk.Tags // also just append them all
 	var code sdk.ABCICodeType
-	for msgIdx, msg := range msgs {
+	for _, msg := range msgs {
 		// Match route.
 		msgRoute := msg.Route()
 		handler := app.router.Route(msgRoute)
@@ -551,20 +551,26 @@ func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, mode runTxMode) (re
 
 		// Stop execution and return on first failed message.
 		if !msgResult.IsOK() {
-			logs = append(logs, fmt.Sprintf("Msg %d failed: %s", msgIdx, msgResult.Log))
+			//logs = append(logs, fmt.Sprintf("Msg %d failed: %s", msgIdx, msgResult.Log))
+			logs = append(logs, fmt.Sprintf("failed detail: %s", msgResult.Log))
 			code = msgResult.Code
 			break
 		}
 
 		// Construct usable logs in multi-message transactions.
-		logs = append(logs, fmt.Sprintf("Msg %d: %s", msgIdx, msgResult.Log))
+		//logs = append(logs, fmt.Sprintf("Msg %d: %s", msgIdx, msgResult.Log))
+	}
+
+	logRs := "success"
+	if len(logs) > 0 {
+		logRs = strings.Join(logs, "\n")
 	}
 
 	// Set the final gas values.
 	result = sdk.Result{
 		Code:    code,
 		Data:    data,
-		Log:     strings.Join(logs, "\n"),
+		Log:     logRs,
 		GasUsed: ctx.GasMeter().GasConsumed(),
 		// TODO: FeeAmount/FeeDenom
 		Tags: tags,
