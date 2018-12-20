@@ -2,20 +2,18 @@ package keys
 
 import (
 	"fmt"
-	"github.com/syndtr/goleveldb/leveldb/opt"
+	"net/http"
 	"path/filepath"
 
 	"github.com/spf13/viper"
-
-	"github.com/PhenixChain/PhenixChain/crypto/keys"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/tendermint/tendermint/libs/cli"
 	dbm "github.com/tendermint/tendermint/libs/db"
 
 	"github.com/PhenixChain/PhenixChain/client"
-
 	"github.com/PhenixChain/PhenixChain/codec"
+	"github.com/PhenixChain/PhenixChain/crypto/keys"
 	sdk "github.com/PhenixChain/PhenixChain/types"
-	"net/http"
 )
 
 // KeyDBName is the directory under root where we store the keys

@@ -1,7 +1,7 @@
 # Luanch Blockchain
 ## Generate genesis file
 ```
-./phenix init
+./phenix init --name=<node name>
 ```
 And you should see something like this:
 ```

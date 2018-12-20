@@ -13,15 +13,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/PhenixChain/PhenixChain/client"
-	"github.com/PhenixChain/PhenixChain/codec"
-	"github.com/PhenixChain/PhenixChain/server/config"
-	"github.com/PhenixChain/PhenixChain/version"
 	tcmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/cli"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
+
+	"github.com/PhenixChain/PhenixChain/client"
+	"github.com/PhenixChain/PhenixChain/codec"
+	"github.com/PhenixChain/PhenixChain/server/config"
+	"github.com/PhenixChain/PhenixChain/version"
 )
 
 // server context
@@ -129,7 +130,7 @@ func validateConfig(conf *cfg.Config) error {
 // add server commands
 func AddCommands(
 	ctx *Context, cdc *codec.Codec,
-	rootCmd *cobra.Command, appInit AppInit,
+	rootCmd *cobra.Command,
 	appCreator AppCreator, appExport AppExporter) {
 
 	rootCmd.PersistentFlags().String("log_level", ctx.Config.LogLevel, "Log level")

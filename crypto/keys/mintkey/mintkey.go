@@ -11,8 +11,9 @@ import (
 	"github.com/tendermint/tendermint/crypto/encoding/amino"
 	"github.com/tendermint/tendermint/crypto/xsalsa20symmetric"
 
-	"github.com/PhenixChain/PhenixChain/crypto/keys/keyerror"
 	cmn "github.com/tendermint/tendermint/libs/common"
+
+	"github.com/PhenixChain/PhenixChain/crypto/keys/keyerror"
 )
 
 const (

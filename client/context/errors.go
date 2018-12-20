@@ -1,8 +1,9 @@
 package context
 
 import (
-	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/pkg/errors"
+
+	sdk "github.com/PhenixChain/PhenixChain/types"
 )
 
 // ErrInvalidAccount returns a standardized error reflecting that a given

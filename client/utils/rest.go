@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -15,11 +14,6 @@ import (
 	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/PhenixChain/PhenixChain/x/auth"
 	authtxb "github.com/PhenixChain/PhenixChain/x/auth/client/txbuilder"
-)
-
-const (
-	queryArgDryRun       = "simulate"
-	queryArgGenerateOnly = "generate_only"
 )
 
 //----------------------------------------
@@ -34,21 +28,9 @@ func WriteErrorResponse(w http.ResponseWriter, status int, err string) {
 
 // WriteSimulationResponse prepares and writes an HTTP
 // response for transactions simulations.
-func WriteSimulationResponse(w http.ResponseWriter, gas int64) {
+func WriteSimulationResponse(w http.ResponseWriter, gas uint64) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(fmt.Sprintf(`{"gas_estimate":%v}`, gas)))
-}
-
-// HasDryRunArg returns true if the request's URL query contains the dry run
-// argument and its value is set to "true".
-func HasDryRunArg(r *http.Request) bool {
-	return urlQueryHasArg(r.URL, queryArgDryRun)
-}
-
-// HasGenerateOnlyArg returns whether a URL's query "generate-only" parameter
-// is set to "true".
-func HasGenerateOnlyArg(r *http.Request) bool {
-	return urlQueryHasArg(r.URL, queryArgGenerateOnly)
 }
 
 // ParseInt64OrReturnBadRequest converts s to a int64 value.
@@ -96,14 +78,14 @@ func ParseFloat64OrReturnBadRequest(w http.ResponseWriter, s string, defaultIfEm
 }
 
 // WriteGenerateStdTxResponse writes response for the generate_only mode.
-func WriteGenerateStdTxResponse(w http.ResponseWriter, txBldr authtxb.TxBuilder, msgs []sdk.Msg) {
+func WriteGenerateStdTxResponse(w http.ResponseWriter, cdc *codec.Codec, txBldr authtxb.TxBuilder, msgs []sdk.Msg) {
 	stdMsg, err := txBldr.Build(msgs)
 	if err != nil {
 		WriteErrorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	output, err := txBldr.Codec.MarshalJSON(auth.NewStdTx(stdMsg.Msgs, stdMsg.Fee, nil, stdMsg.Memo))
+	output, err := cdc.MarshalJSON(auth.NewStdTx(stdMsg.Msgs, stdMsg.Fee, nil, stdMsg.Memo))
 	if err != nil {
 		WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
 		return
@@ -112,8 +94,6 @@ func WriteGenerateStdTxResponse(w http.ResponseWriter, txBldr authtxb.TxBuilder,
 	w.Write(output)
 	return
 }
-
-func urlQueryHasArg(url *url.URL, arg string) bool { return url.Query().Get(arg) == "true" }
 
 //----------------------------------------
 // Building / Sending utilities
@@ -124,9 +104,11 @@ type BaseReq struct {
 	Name          string `json:"name"`
 	Password      string `json:"password"`
 	ChainID       string `json:"chain_id"`
-	Sequence      int64  `json:"sequence"`
+	Sequence      uint64 `json:"sequence"`
 	Gas           string `json:"gas"`
 	GasAdjustment string `json:"gas_adjustment"`
+	GenerateOnly  bool   `json:"generate_only"`
+	Simulate      bool   `json:"simulate"`
 }
 
 // Sanitize performs basic sanitization on a BaseReq object.
@@ -138,6 +120,8 @@ func (br BaseReq) Sanitize() BaseReq {
 		Gas:           strings.TrimSpace(br.Gas),
 		GasAdjustment: strings.TrimSpace(br.GasAdjustment),
 		Sequence:      br.Sequence,
+		GenerateOnly:  br.GenerateOnly,
+		Simulate:      br.Simulate,
 	}
 }
 
@@ -173,21 +157,21 @@ func ReadRESTReq(w http.ResponseWriter, r *http.Request, cdc *codec.Codec, req i
 // ValidateBasic performs basic validation of a BaseReq. If custom validation
 // logic is needed, the implementing request handler should perform those
 // checks manually.
-func (br BaseReq) ValidateBasic(w http.ResponseWriter) bool {
-	switch {
-	case len(br.Name) == 0:
+func (br BaseReq) ValidateBasic(w http.ResponseWriter, cliCtx context.CLIContext) bool {
+	if !cliCtx.GenerateOnly && !cliCtx.Simulate {
+		switch {
+		case len(br.Password) == 0:
+			WriteErrorResponse(w, http.StatusUnauthorized, "password required but not specified")
+			return false
+		case len(br.ChainID) == 0:
+			WriteErrorResponse(w, http.StatusUnauthorized, "chain-id required but not specified")
+			return false
+		}
+	}
+	if len(br.Name) == 0 {
 		WriteErrorResponse(w, http.StatusUnauthorized, "name required but not specified")
 		return false
-
-	case len(br.Password) == 0:
-		WriteErrorResponse(w, http.StatusUnauthorized, "password required but not specified")
-		return false
-
-	case len(br.ChainID) == 0:
-		WriteErrorResponse(w, http.StatusUnauthorized, "chainID required but not specified")
-		return false
 	}
-
 	return true
 }
 
@@ -212,7 +196,7 @@ func CompleteAndBroadcastTxREST(w http.ResponseWriter, r *http.Request, cliCtx c
 	}
 
 	txBldr := authtxb.TxBuilder{
-		Codec:         cdc,
+		TxEncoder:     GetTxEncoder(cdc),
 		Gas:           gas,
 		GasAdjustment: adjustment,
 		SimulateGas:   simulateGas,
@@ -220,14 +204,14 @@ func CompleteAndBroadcastTxREST(w http.ResponseWriter, r *http.Request, cliCtx c
 		Sequence:      baseReq.Sequence,
 	}
 
-	if HasDryRunArg(r) || txBldr.SimulateGas {
+	if baseReq.Simulate || txBldr.SimulateGas {
 		newBldr, err := EnrichCtxWithGas(txBldr, cliCtx, baseReq.Name, msgs)
 		if err != nil {
 			WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		if HasDryRunArg(r) {
+		if baseReq.Simulate {
 			WriteSimulationResponse(w, newBldr.Gas)
 			return
 		}
@@ -235,8 +219,8 @@ func CompleteAndBroadcastTxREST(w http.ResponseWriter, r *http.Request, cliCtx c
 		txBldr = newBldr
 	}
 
-	if HasGenerateOnlyArg(r) {
-		WriteGenerateStdTxResponse(w, txBldr, msgs)
+	if baseReq.GenerateOnly {
+		WriteGenerateStdTxResponse(w, cdc, txBldr, msgs)
 		return
 	}
 

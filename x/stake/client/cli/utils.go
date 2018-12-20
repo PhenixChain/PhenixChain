@@ -1,13 +1,13 @@
 package cli
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
-	authcmd "github.com/PhenixChain/PhenixChain/x/auth/client/cli"
 	"github.com/PhenixChain/PhenixChain/x/stake"
 	"github.com/PhenixChain/PhenixChain/x/stake/types"
-	"github.com/pkg/errors"
 )
 
 func getShares(
@@ -45,7 +45,7 @@ func getShares(
 		key := stake.GetDelegationKey(delAddr, valAddr)
 		cliCtx := context.NewCLIContext().
 			WithCodec(cdc).
-			WithAccountDecoder(authcmd.GetAccountDecoder(cdc))
+			WithAccountDecoder(cdc)
 
 		resQuery, err := cliCtx.QueryStore(key, storeName)
 		if err != nil {

@@ -2,10 +2,16 @@
 
 
 [[projects]]
-  branch = "master"
   name = "github.com/ZondaX/hid-go"
   packages = ["."]
   revision = "48b08affede2cea076a3cf13b2e3f72ed262b743"
+  version = "v0.4.0"
+
+[[projects]]
+  name = "github.com/ZondaX/ledger-go"
+  packages = ["."]
+  revision = "c3225ab10c2f53397d4aa419a588466493572b22"
+  version = "v0.4.0"
 
 [[projects]]
   branch = "master"
@@ -29,7 +35,7 @@
   branch = "master"
   name = "github.com/btcsuite/btcd"
   packages = ["btcec"]
-  revision = "67e573d211ace594f1366b4ce9d39726c4b19bd0"
+  revision = "7d2daa5bfef28c5e282571bc06416516936115ee"
 
 [[projects]]
   name = "github.com/btcsuite/btcutil"
@@ -70,8 +76,8 @@
 [[projects]]
   name = "github.com/go-logfmt/logfmt"
   packages = ["."]
-  revision = "390ab7935ee28ec6b286364bba9b4dd6410cb3d5"
-  version = "v0.3.0"
+  revision = "07c9b44f60d7ffdfb7d8efe1ad539965737836dc"
+  version = "v0.4.0"
 
 [[projects]]
   name = "github.com/go-stack/stack"
@@ -125,8 +131,8 @@
 [[projects]]
   name = "github.com/gorilla/websocket"
   packages = ["."]
-  revision = "ea4d1f681babbce9545c9c5f3d5194a789c89f5b"
-  version = "v1.2.0"
+  revision = "66b9c49e59c6c48f0ffce28c2d8b8a5678502c6d"
+  version = "v1.4.0"
 
 [[projects]]
   name = "github.com/hashicorp/hcl"
@@ -134,6 +140,7 @@
     ".",
     "hcl/ast",
     "hcl/parser",
+    "hcl/printer",
     "hcl/scanner",
     "hcl/strconv",
     "hcl/token",
@@ -181,12 +188,6 @@
   version = "v1.0.1"
 
 [[projects]]
-  name = "github.com/mitchellh/go-homedir"
-  packages = ["."]
-  revision = "ae18d6b8b3205b561c79e8e5f69bff09736185f4"
-  version = "v1.0.0"
-
-[[projects]]
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
   revision = "3536a929edddb9a5b34bd6861dc4a9647cb459fe"
@@ -214,9 +215,11 @@
   name = "github.com/prometheus/client_golang"
   packages = [
     "prometheus",
+    "prometheus/internal",
     "prometheus/promhttp"
   ]
-  revision = "ae27198cdd90bf12cd134ad79d1366a6cf49f632"
+  revision = "505eaef017263e299324067d40ca2c48f6a2cf50"
+  version = "v0.9.2"
 
 [[projects]]
   branch = "master"
@@ -232,7 +235,7 @@
     "internal/bitbucket.org/ww/goautoneg",
     "model"
   ]
-  revision = "0b1957f9d949dfa3084171a6ec5642b38055276a"
+  revision = "4724e9255275ce38f7179b2478abeae4e28c904f"
 
 [[projects]]
   branch = "master"
@@ -243,7 +246,7 @@
     "nfs",
     "xfs"
   ]
-  revision = "185b4288413d2a0dd0806f78c90dde719829e5ae"
+  revision = "1dc9a6cbc91aacc3e8b2d63db4d2e957a5394ac4"
 
 [[projects]]
   name = "github.com/rakyll/statik"
@@ -255,6 +258,12 @@
   name = "github.com/rcrowley/go-metrics"
   packages = ["."]
   revision = "e2704e165165ec55d062f5919b4b29494e9fa790"
+
+[[projects]]
+  name = "github.com/rs/cors"
+  packages = ["."]
+  revision = "9a47f48565a795472d43519dd49aac781f3034fb"
+  version = "v1.6.0"
 
 [[projects]]
   name = "github.com/spf13/afero"
@@ -274,8 +283,8 @@
 [[projects]]
   name = "github.com/spf13/cobra"
   packages = ["."]
-  revision = "7b2c5ac9fc04fc5efafb60700713d4fa609b777b"
-  version = "v0.0.1"
+  revision = "ef82de70bb3f60c65fb8eebacbb2d122ef517385"
+  version = "v0.0.3"
 
 [[projects]]
   name = "github.com/spf13/jwalterweatherman"
@@ -292,8 +301,8 @@
 [[projects]]
   name = "github.com/spf13/viper"
   packages = ["."]
-  revision = "25b30aa063fc18e48662b86996252eabdcf2f0c7"
-  version = "v1.0.0"
+  revision = "a1b837276271029e31f796ae5d03ba9ffb017244"
+  version = "v1.0.3"
 
 [[projects]]
   name = "github.com/stretchr/testify"
@@ -330,14 +339,14 @@
 [[projects]]
   name = "github.com/tendermint/go-amino"
   packages = ["."]
-  revision = "6dcc6ddc143e116455c94b25c1004c99e0d0ca12"
-  version = "v0.14.0"
+  revision = "dc14acf9ef15f85828bfbc561ed9dd9d2a284885"
+  version = "v0.14.1"
 
 [[projects]]
   name = "github.com/tendermint/iavl"
   packages = ["."]
-  revision = "fa74114f764f9827c4ad5573f990ed25bf8c4bac"
-  version = "v0.11.1"
+  revision = "de0740903a67b624d887f9055d4c60175dcfa758"
+  version = "v0.12.0"
 
 [[projects]]
   name = "github.com/tendermint/tendermint"
@@ -370,7 +379,6 @@
     "libs/clist",
     "libs/common",
     "libs/db",
-    "libs/errors",
     "libs/events",
     "libs/fail",
     "libs/flowrate",
@@ -404,14 +412,13 @@
     "types/time",
     "version"
   ]
-  revision = "48ab899923c564bbf2fa2f1244c11cb930e28132"
-  version = "v0.26.1-rc3"
+  revision = "v0.27.3"
 
 [[projects]]
-  name = "github.com/zondax/ledger-goclient"
+  name = "github.com/zondax/ledger-cosmos-go"
   packages = ["."]
-  revision = "58598458c11bc0ad1c1b8dac3dc3e11eaf270b79"
-  version = "v0.1.0"
+  revision = "d4aed6d929a703bb555a2d79fe9c470afe61f648"
+  version = "v0.9.2"
 
 [[projects]]
   name = "golang.org/x/crypto"
@@ -492,16 +499,23 @@
     "balancer",
     "balancer/base",
     "balancer/roundrobin",
+    "binarylog/grpc_binarylog_v1",
     "codes",
     "connectivity",
     "credentials",
+    "credentials/internal",
     "encoding",
     "encoding/proto",
     "grpclog",
     "internal",
     "internal/backoff",
+    "internal/binarylog",
     "internal/channelz",
+    "internal/envconfig",
     "internal/grpcrand",
+    "internal/grpcsync",
+    "internal/syscall",
+    "internal/transport",
     "keepalive",
     "metadata",
     "naming",
@@ -511,21 +525,20 @@
     "resolver/passthrough",
     "stats",
     "status",
-    "tap",
-    "transport"
+    "tap"
   ]
-  revision = "168a6198bcb0ef175f7dacec0b8691fc141dc9b8"
-  version = "v1.13.0"
+  revision = "df014850f6dee74ba2fc94874043a9f3f75fbfd8"
+  version = "v1.17.0"
 
 [[projects]]
   name = "gopkg.in/yaml.v2"
   packages = ["."]
-  revision = "5420a8b6744d3b0345ab293f6fcba19c978f1183"
-  version = "v2.2.1"
+  revision = "51d6538a90f86fe93ac480b35f37b2be17fef232"
+  version = "v2.2.2"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "54b6e50c0a144ea6020fa10bfe736e5f201ca0b98991f8d3efd1d7c1b3e817e3"
+  inputs-digest = "0642da0bc23bd0f93a308979742a295ff16736e43c726dc0817dac8ca0b8f4ac"
   solver-name = "gps-cdcl"
   solver-version = 1

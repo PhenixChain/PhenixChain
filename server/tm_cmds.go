@@ -3,15 +3,17 @@ package server
 import (
 	"fmt"
 
-	"github.com/PhenixChain/PhenixChain/codec"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/PhenixChain/PhenixChain/client"
-	sdk "github.com/PhenixChain/PhenixChain/types"
+	"github.com/PhenixChain/PhenixChain/codec"
+
 	tcmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
 	"github.com/tendermint/tendermint/p2p"
 	pvm "github.com/tendermint/tendermint/privval"
+
+	"github.com/PhenixChain/PhenixChain/client"
+	sdk "github.com/PhenixChain/PhenixChain/types"
 )
 
 // ShowNodeIDCmd - ported from Tendermint, dump node ID to stdout
@@ -63,17 +65,17 @@ func ShowValidatorCmd(ctx *Context) *cobra.Command {
 func ShowAddressCmd(ctx *Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show-address",
-		Short: "Shows this node's tendermint validator address",
+		Short: "Shows this node's tendermint validator consensus address",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := ctx.Config
 			privValidator := pvm.LoadOrGenFilePV(cfg.PrivValidatorFile())
-			valAddr := (sdk.ValAddress)(privValidator.Address)
+			valConsAddr := (sdk.ConsAddress)(privValidator.Address)
 
 			if viper.GetBool(client.FlagJson) {
-				return printlnJSON(valAddr)
+				return printlnJSON(valConsAddr)
 			}
 
-			fmt.Println(valAddr.String())
+			fmt.Println(valConsAddr.String())
 			return nil
 		},
 	}

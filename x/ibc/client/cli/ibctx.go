@@ -2,13 +2,13 @@ package cli
 
 import (
 	"encoding/hex"
+	"os"
 
 	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/client/utils"
-	codec "github.com/PhenixChain/PhenixChain/codec"
+	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
-	authcmd "github.com/PhenixChain/PhenixChain/x/auth/client/cli"
 	authtxb "github.com/PhenixChain/PhenixChain/x/auth/client/txbuilder"
 	"github.com/PhenixChain/PhenixChain/x/ibc"
 
@@ -27,10 +27,10 @@ func IBCTransferCmd(cdc *codec.Codec) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "transfer",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := authtxb.NewTxBuilderFromCLI().WithCodec(cdc)
+			txBldr := authtxb.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContext().
 				WithCodec(cdc).
-				WithAccountDecoder(authcmd.GetAccountDecoder(cdc))
+				WithAccountDecoder(cdc)
 
 			from, err := cliCtx.GetFromAddress()
 			if err != nil {
@@ -42,7 +42,7 @@ func IBCTransferCmd(cdc *codec.Codec) *cobra.Command {
 				return err
 			}
 			if cliCtx.GenerateOnly {
-				return utils.PrintUnsignedStdTx(txBldr, cliCtx, []sdk.Msg{msg}, false)
+				return utils.PrintUnsignedStdTx(os.Stdout, txBldr, cliCtx, []sdk.Msg{msg}, false)
 			}
 
 			return utils.CompleteAndBroadcastTxCli(txBldr, cliCtx, []sdk.Msg{msg})

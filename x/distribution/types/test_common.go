@@ -1,9 +1,10 @@
 package types
 
 import (
-	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+
+	sdk "github.com/PhenixChain/PhenixChain/types"
 )
 
 var (

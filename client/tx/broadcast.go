@@ -3,10 +3,11 @@ package tx
 import (
 	"net/http"
 
+	"io/ioutil"
+
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/client/utils"
 	"github.com/PhenixChain/PhenixChain/codec"
-	"io/ioutil"
 )
 
 const (

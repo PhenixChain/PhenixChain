@@ -2,19 +2,10 @@ package tx
 
 import (
 	"github.com/gorilla/mux"
-	"github.com/spf13/cobra"
 
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/codec"
 )
-
-// AddCommands adds a number of tx-query related subcommands
-func AddCommands(cmd *cobra.Command, cdc *codec.Codec) {
-	cmd.AddCommand(
-		SearchTxCmd(cdc),
-		QueryTxCmd(cdc),
-	)
-}
 
 // register REST routes
 func RegisterRoutes(cliCtx context.CLIContext, r *mux.Router, cdc *codec.Codec) {

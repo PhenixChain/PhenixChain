@@ -3,9 +3,10 @@ package auth
 import (
 	"errors"
 
+	"github.com/tendermint/tendermint/crypto"
+
 	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
-	"github.com/tendermint/tendermint/crypto"
 )
 
 // Account is an interface used to store coins at a given address within state.
@@ -21,8 +22,8 @@ type Account interface {
 	GetPubKey() crypto.PubKey // can return nil.
 	SetPubKey(crypto.PubKey) error
 
-	GetSequence() int64
-	SetSequence(int64) error
+	GetSequence() uint64
+	SetSequence(uint64) error
 
 	GetCoins() sdk.Coins
 	SetCoins(sdk.Coins) error
@@ -45,7 +46,7 @@ type BaseAccount struct {
 	Address  sdk.AccAddress `json:"address"`
 	Coins    sdk.Coins      `json:"coins"`
 	PubKey   crypto.PubKey  `json:"public_key"`
-	Sequence int64          `json:"sequence"`
+	Sequence uint64         `json:"sequence"`
 }
 
 // Prototype function for BaseAccount
@@ -96,12 +97,12 @@ func (acc *BaseAccount) SetCoins(coins sdk.Coins) error {
 }
 
 // Implements sdk.Account.
-func (acc *BaseAccount) GetSequence() int64 {
+func (acc *BaseAccount) GetSequence() uint64 {
 	return acc.Sequence
 }
 
 // Implements sdk.Account.
-func (acc *BaseAccount) SetSequence(seq int64) error {
+func (acc *BaseAccount) SetSequence(seq uint64) error {
 	acc.Sequence = seq
 	return nil
 }

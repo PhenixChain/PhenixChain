@@ -4,10 +4,12 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/PhenixChain/PhenixChain/client/context"
-	"github.com/PhenixChain/PhenixChain/x/auth"
 	"github.com/spf13/cobra"
 	amino "github.com/tendermint/go-amino"
+
+	"github.com/PhenixChain/PhenixChain/client"
+	"github.com/PhenixChain/PhenixChain/client/context"
+	"github.com/PhenixChain/PhenixChain/x/auth"
 )
 
 // GetSignCommand returns the sign command
@@ -36,7 +38,7 @@ in place of an input filename, the command reads from standard input.`,
 		},
 	}
 
-	return cmd
+	return client.PostCommands(cmd)[0]
 }
 
 func readAndUnmarshalStdTx(cdc *amino.Codec, filename string) (stdTx auth.StdTx, err error) {

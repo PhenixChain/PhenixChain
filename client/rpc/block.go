@@ -8,11 +8,12 @@ import (
 	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/PhenixChain/PhenixChain/client/context"
 
-	"github.com/PhenixChain/PhenixChain/client/utils"
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	tmliteProxy "github.com/tendermint/tendermint/lite/proxy"
+
+	"github.com/PhenixChain/PhenixChain/client/utils"
 )
 
 //BlockCommand returns the verified block data for a given heights

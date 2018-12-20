@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/PhenixChain/PhenixChain/client"
-	keys "github.com/PhenixChain/PhenixChain/crypto/keys"
 	"github.com/gorilla/mux"
 
-	"github.com/PhenixChain/PhenixChain/crypto/keys/keyerror"
+	"github.com/PhenixChain/PhenixChain/client"
+	keys "github.com/PhenixChain/PhenixChain/crypto/keys"
+
 	"github.com/spf13/cobra"
+
+	"github.com/PhenixChain/PhenixChain/crypto/keys/keyerror"
 )
 
 func updateKeyCommand() *cobra.Command {

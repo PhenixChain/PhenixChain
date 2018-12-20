@@ -18,7 +18,7 @@ type SignBody struct {
 	LocalAccountName string     `json:"name"`
 	Password         string     `json:"password"`
 	ChainID          string     `json:"chain_id"`
-	Sequence         int64      `json:"sequence"`
+	Sequence         uint64     `json:"sequence"`
 	AppendSig        bool       `json:"append_sig"`
 }
 

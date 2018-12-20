@@ -1,8 +1,9 @@
 package client
 
 import (
-	"github.com/PhenixChain/PhenixChain/crypto/keys"
 	dbm "github.com/tendermint/tendermint/libs/db"
+
+	"github.com/PhenixChain/PhenixChain/crypto/keys"
 )
 
 // GetKeyBase initializes a keybase based on the given db.

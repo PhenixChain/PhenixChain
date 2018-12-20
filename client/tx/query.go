@@ -12,14 +12,14 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 
+	"github.com/spf13/viper"
+
 	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/client/utils"
 	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/PhenixChain/PhenixChain/x/auth"
-
-	"github.com/spf13/viper"
 )
 
 // QueryTxCmd implements the default command for a tx query.
@@ -126,8 +126,7 @@ type Info struct {
 func parseTx(cdc *codec.Codec, txBytes []byte) (sdk.Tx, error) {
 	var tx auth.StdTx
 
-	//nikolas
-	err := cdc.UnmarshalJSON(txBytes, &tx)
+	err := cdc.UnmarshalBinaryLengthPrefixed(txBytes, &tx)
 	if err != nil {
 		return nil, err
 	}

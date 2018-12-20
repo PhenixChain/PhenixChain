@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gorilla/mux"
+
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/client/tx"
 	"github.com/PhenixChain/PhenixChain/client/utils"
@@ -11,7 +13,6 @@ import (
 	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/PhenixChain/PhenixChain/x/stake"
 	"github.com/PhenixChain/PhenixChain/x/stake/tags"
-	"github.com/gorilla/mux"
 
 	rpcclient "github.com/tendermint/tendermint/rpc/client"
 )
@@ -62,10 +63,7 @@ func queryBonds(cliCtx context.CLIContext, cdc *codec.Codec, endpoint string) ht
 			return
 		}
 
-		params := stake.QueryBondsParams{
-			DelegatorAddr: delegatorAddr,
-			ValidatorAddr: validatorAddr,
-		}
+		params := stake.NewQueryBondsParams(delegatorAddr, validatorAddr)
 
 		bz, err := cdc.MarshalJSON(params)
 		if err != nil {
@@ -93,9 +91,7 @@ func queryDelegator(cliCtx context.CLIContext, cdc *codec.Codec, endpoint string
 			return
 		}
 
-		params := stake.QueryDelegatorParams{
-			DelegatorAddr: delegatorAddr,
-		}
+		params := stake.NewQueryDelegatorParams(delegatorAddr)
 
 		bz, err := cdc.MarshalJSON(params)
 		if err != nil {
@@ -123,9 +119,7 @@ func queryValidator(cliCtx context.CLIContext, cdc *codec.Codec, endpoint string
 			return
 		}
 
-		params := stake.QueryValidatorParams{
-			ValidatorAddr: validatorAddr,
-		}
+		params := stake.NewQueryValidatorParams(validatorAddr)
 
 		bz, err := cdc.MarshalJSON(params)
 		if err != nil {

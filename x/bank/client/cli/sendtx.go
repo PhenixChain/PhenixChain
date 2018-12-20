@@ -1,14 +1,17 @@
 package cli
 
 import (
+	"os"
+
+	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/client/utils"
 	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
-	authcmd "github.com/PhenixChain/PhenixChain/x/auth/client/cli"
 	authtxb "github.com/PhenixChain/PhenixChain/x/auth/client/txbuilder"
-	"github.com/PhenixChain/PhenixChain/x/bank/client"
+	bankClient "github.com/PhenixChain/PhenixChain/x/bank/client"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -24,10 +27,10 @@ func SendTxCmd(cdc *codec.Codec) *cobra.Command {
 		Use:   "send",
 		Short: "Create and sign a send tx",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := authtxb.NewTxBuilderFromCLI().WithCodec(cdc)
+			txBldr := authtxb.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContext().
 				WithCodec(cdc).
-				WithAccountDecoder(authcmd.GetAccountDecoder(cdc))
+				WithAccountDecoder(cdc)
 
 			if err := cliCtx.EnsureAccountExists(); err != nil {
 				return err
@@ -52,20 +55,20 @@ func SendTxCmd(cdc *codec.Codec) *cobra.Command {
 				return err
 			}
 
-			/* 			account, err := cliCtx.GetAccount(from)
-			   			if err != nil {
-			   				return err
-			   			}
+			account, err := cliCtx.GetAccount(from)
+			if err != nil {
+				return err
+			}
 
-			   			// ensure account has enough coins
-			   			if !account.GetCoins().IsAllGTE(coins) {
-			   				return errors.Errorf("Address %s doesn't have enough coins to pay for this transaction.", from)
-			   			} */
+			// ensure account has enough coins
+			if !account.GetCoins().IsAllGTE(coins) {
+				return errors.Errorf("Address %s doesn't have enough coins to pay for this transaction.", from)
+			}
 
 			// build and sign the transaction, then broadcast to Tendermint
-			msg := client.CreateMsg(from, to, coins)
+			msg := bankClient.CreateMsg(from, to, coins)
 			if cliCtx.GenerateOnly {
-				return utils.PrintUnsignedStdTx(txBldr, cliCtx, []sdk.Msg{msg}, false)
+				return utils.PrintUnsignedStdTx(os.Stdout, txBldr, cliCtx, []sdk.Msg{msg}, false)
 			}
 
 			return utils.CompleteAndBroadcastTxCli(txBldr, cliCtx, []sdk.Msg{msg})
@@ -77,5 +80,5 @@ func SendTxCmd(cdc *codec.Codec) *cobra.Command {
 	cmd.MarkFlagRequired(flagTo)
 	cmd.MarkFlagRequired(flagAmount)
 
-	return cmd
+	return client.PostCommands(cmd)[0]
 }

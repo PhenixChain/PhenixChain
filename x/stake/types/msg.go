@@ -3,8 +3,9 @@ package types
 import (
 	"bytes"
 
-	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/tendermint/tendermint/crypto"
+
+	sdk "github.com/PhenixChain/PhenixChain/types"
 )
 
 // name to identify transaction routes

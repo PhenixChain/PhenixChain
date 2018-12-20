@@ -1,6 +1,8 @@
 package keeper
 
 import (
+	"container/list"
+
 	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
 
@@ -9,14 +11,18 @@ import (
 	"github.com/PhenixChain/PhenixChain/x/stake/types"
 )
 
+const aminoCacheSize = 500
+
 // keeper of the stake store
 type Keeper struct {
-	storeKey   sdk.StoreKey
-	storeTKey  sdk.StoreKey
-	cdc        *codec.Codec
-	bankKeeper bank.Keeper
-	hooks      sdk.StakingHooks
-	paramstore params.Subspace
+	storeKey           sdk.StoreKey
+	storeTKey          sdk.StoreKey
+	cdc                *codec.Codec
+	bankKeeper         bank.Keeper
+	hooks              sdk.StakingHooks
+	paramstore         params.Subspace
+	validatorCache     map[string]cachedValidator
+	validatorCacheList *list.List
 
 	// codespace
 	codespace sdk.CodespaceType
@@ -24,13 +30,15 @@ type Keeper struct {
 
 func NewKeeper(cdc *codec.Codec, key, tkey sdk.StoreKey, ck bank.Keeper, paramstore params.Subspace, codespace sdk.CodespaceType) Keeper {
 	keeper := Keeper{
-		storeKey:   key,
-		storeTKey:  tkey,
-		cdc:        cdc,
-		bankKeeper: ck,
-		paramstore: paramstore.WithTypeTable(ParamTypeTable()),
-		hooks:      nil,
-		codespace:  codespace,
+		storeKey:           key,
+		storeTKey:          tkey,
+		cdc:                cdc,
+		bankKeeper:         ck,
+		paramstore:         paramstore.WithTypeTable(ParamTypeTable()),
+		hooks:              nil,
+		validatorCache:     make(map[string]cachedValidator, aminoCacheSize),
+		validatorCacheList: list.New(),
+		codespace:          codespace,
 	}
 	return keeper
 }
@@ -112,29 +120,23 @@ func (k Keeper) SetLastValidatorPower(ctx sdk.Context, operator sdk.ValAddress, 
 	store.Set(GetLastValidatorPowerKey(operator), bz)
 }
 
+// Iterate over last validator powers.
+func (k Keeper) IterateLastValidatorPowers(ctx sdk.Context, handler func(operator sdk.ValAddress, power sdk.Int) (stop bool)) {
+	store := ctx.KVStore(k.storeKey)
+	iter := sdk.KVStorePrefixIterator(store, LastValidatorPowerKey)
+	defer iter.Close()
+	for ; iter.Valid(); iter.Next() {
+		addr := sdk.ValAddress(iter.Key()[len(LastValidatorPowerKey):])
+		var power sdk.Int
+		k.cdc.MustUnmarshalBinaryLengthPrefixed(iter.Value(), &power)
+		if handler(addr, power) {
+			break
+		}
+	}
+}
+
 // Delete the last validator power.
 func (k Keeper) DeleteLastValidatorPower(ctx sdk.Context, operator sdk.ValAddress) {
 	store := ctx.KVStore(k.storeKey)
 	store.Delete(GetLastValidatorPowerKey(operator))
-}
-
-//__________________________________________________________________________
-
-// get the current in-block validator operation counter
-func (k Keeper) GetIntraTxCounter(ctx sdk.Context) int16 {
-	store := ctx.KVStore(k.storeKey)
-	b := store.Get(IntraTxCounterKey)
-	if b == nil {
-		return 0
-	}
-	var counter int16
-	k.cdc.MustUnmarshalBinaryLengthPrefixed(b, &counter)
-	return counter
-}
-
-// set the current in-block validator operation counter
-func (k Keeper) SetIntraTxCounter(ctx sdk.Context, counter int16) {
-	store := ctx.KVStore(k.storeKey)
-	bz := k.cdc.MustMarshalBinaryLengthPrefixed(counter)
-	store.Set(IntraTxCounterKey, bz)
 }

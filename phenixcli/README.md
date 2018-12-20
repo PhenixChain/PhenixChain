@@ -8,15 +8,15 @@
 
 ## Send transactions
 ```
-./phenixcli send --from=<from address> --amount=6mycoin --to=<to address> --chain-id=phenix
+./phenixcli tx send --from=<from address> --amount=6mycoin --to=<to address> --chain-id=phenix
 ```
 
 ## Query transaction
 ```
-./phenixcli tx <TX HASH> --chain-id=phenix
+./phenixcli query tx <TX HASH> --chain-id=phenix
 ```
 
 ## Query account
 ```
-./phenixcli account <address> --chain-id=phenix
+./phenixcli query account <address> --chain-id=phenix
 ```

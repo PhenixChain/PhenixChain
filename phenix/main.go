@@ -38,11 +38,9 @@ func main() {
 		PersistentPreRunE: server.PersistentPreRunEFn(ctx),
 	}
 
-	appInit := server.DefaultAppInit
-	rootCmd.AddCommand(InitCmd(ctx, cdc, appInit))
+	rootCmd.AddCommand(InitCmd(ctx, cdc))
 
-	server.AddCommands(ctx, cdc, rootCmd, appInit,
-		newApp, exportAppStateAndTMValidators)
+	server.AddCommands(ctx, cdc, rootCmd, newApp, exportAppStateAndTMValidators)
 
 	// prepare and add flags
 	rootDir := os.ExpandEnv("$HOME/.phenix")
@@ -57,7 +55,7 @@ func main() {
 
 // get cmd to initialize all files for tendermint and application
 // nolint: errcheck
-func InitCmd(ctx *server.Context, cdc *codec.Codec, appInit server.AppInit) *cobra.Command {
+func InitCmd(ctx *server.Context, cdc *codec.Codec) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize genesis config, priv-validator file, and p2p-node file",
@@ -83,12 +81,12 @@ func InitCmd(ctx *server.Context, cdc *codec.Codec, appInit server.AppInit) *cob
 				return err
 			}
 
-			appState, err := appInit.AppGenState(
-				cdc, tmtypes.GenesisDoc{}, []json.RawMessage{genTx})
+			appState, err := server.SimpleAppGenState(cdc, tmtypes.GenesisDoc{}, []json.RawMessage{genTx})
 			if err != nil {
 				return err
 			}
 			appStateJSON, err := cdc.MarshalJSON(appState)
+
 			if err != nil {
 				return err
 			}
@@ -125,7 +123,7 @@ func newApp(logger log.Logger, db dbm.DB, storeTracer io.Writer) abci.Applicatio
 	return app.NewBasecoinApp(logger, db, baseapp.SetPruning(viper.GetString("pruning")))
 }
 
-func exportAppStateAndTMValidators(logger log.Logger, db dbm.DB, storeTracer io.Writer) (
+func exportAppStateAndTMValidators(logger log.Logger, db dbm.DB, _ io.Writer, _ int64, _ bool) (
 	json.RawMessage, []tmtypes.GenesisValidator, error) {
 	bapp := app.NewBasecoinApp(logger, db)
 	return bapp.ExportAppStateAndValidators()

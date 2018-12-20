@@ -2,14 +2,20 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
+
+	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/multisig"
 
 	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
-
-	"github.com/tendermint/tendermint/crypto"
 )
 
-var _ sdk.Tx = (*StdTx)(nil)
+var (
+	_ sdk.Tx = (*StdTx)(nil)
+
+	maxGasWanted = uint64((1 << 63) - 1)
+)
 
 // StdTx is a standard way to wrap a Msg with Fee and Signatures.
 // NOTE: the first signature is the fee payer (Signatures must not be nil).
@@ -29,11 +35,64 @@ func NewStdTx(msgs []sdk.Msg, fee StdFee, sigs []StdSignature, memo string) StdT
 	}
 }
 
-//nolint
+// GetMsgs returns the all the transaction's messages.
 func (tx StdTx) GetMsgs() []sdk.Msg { return tx.Msgs }
 
+// ValidateBasic does a simple and lightweight validation check that doesn't
+// require access to any other information.
+func (tx StdTx) ValidateBasic() sdk.Error {
+	stdSigs := tx.GetSignatures()
+
+	if tx.Fee.Gas > maxGasWanted {
+		return sdk.ErrGasOverflow(fmt.Sprintf("invalid gas supplied; %d > %d", tx.Fee.Gas, maxGasWanted))
+	}
+	if !tx.Fee.Amount.IsNotNegative() {
+		return sdk.ErrInsufficientFee(fmt.Sprintf("invalid fee %s amount provided", tx.Fee.Amount))
+	}
+	if len(stdSigs) == 0 {
+		return sdk.ErrUnauthorized("no signers")
+	}
+	if len(stdSigs) != len(tx.GetSigners()) {
+		return sdk.ErrUnauthorized("wrong number of signers")
+	}
+	if len(tx.GetMemo()) > maxMemoCharacters {
+		return sdk.ErrMemoTooLarge(
+			fmt.Sprintf(
+				"maximum number of characters is %d but received %d characters",
+				maxMemoCharacters, len(tx.GetMemo()),
+			),
+		)
+	}
+
+	sigCount := 0
+	for i := 0; i < len(stdSigs); i++ {
+		sigCount += countSubKeys(stdSigs[i].PubKey)
+		if sigCount > txSigLimit {
+			return sdk.ErrTooManySignatures(
+				fmt.Sprintf("signatures: %d, limit: %d", sigCount, txSigLimit),
+			)
+		}
+	}
+
+	return nil
+}
+
+func countSubKeys(pub crypto.PubKey) int {
+	v, ok := pub.(*multisig.PubKeyMultisigThreshold)
+	if !ok {
+		return 1
+	}
+
+	numKeys := 0
+	for _, subkey := range v.PubKeys {
+		numKeys += countSubKeys(subkey)
+	}
+
+	return numKeys
+}
+
 // GetSigners returns the addresses that must sign the transaction.
-// Addresses are returned in a determistic order.
+// Addresses are returned in a deterministic order.
 // They are accumulated from the GetSigners method for each Msg
 // in the order they appear in tx.GetMsgs().
 // Duplicate addresses will be omitted.
@@ -71,10 +130,10 @@ func (tx StdTx) GetSignatures() []StdSignature { return tx.Signatures }
 // which must be above some miminum to be accepted into the mempool.
 type StdFee struct {
 	Amount sdk.Coins `json:"amount"`
-	Gas    int64     `json:"gas"`
+	Gas    uint64    `json:"gas"`
 }
 
-func NewStdFee(gas int64, amount ...sdk.Coin) StdFee {
+func NewStdFee(gas uint64, amount ...sdk.Coin) StdFee {
 	return StdFee{
 		Amount: amount,
 		Gas:    gas,
@@ -109,11 +168,11 @@ type StdSignDoc struct {
 	Fee      json.RawMessage   `json:"fee"`
 	Memo     string            `json:"memo"`
 	Msgs     []json.RawMessage `json:"msgs"`
-	Sequence int64             `json:"sequence"`
+	Sequence uint64            `json:"sequence"`
 }
 
 // StdSignBytes returns the bytes to sign for a transaction.
-func StdSignBytes(chainID string, sequence int64, fee StdFee, msgs []sdk.Msg, memo string) []byte {
+func StdSignBytes(chainID string, sequence uint64, fee StdFee, msgs []sdk.Msg, memo string) []byte {
 	var msgsBytes []json.RawMessage
 	for _, msg := range msgs {
 		msgsBytes = append(msgsBytes, json.RawMessage(msg.GetSignBytes()))
@@ -135,7 +194,6 @@ func StdSignBytes(chainID string, sequence int64, fee StdFee, msgs []sdk.Msg, me
 type StdSignature struct {
 	crypto.PubKey `json:"pub_key"` // optional
 	Signature     []byte           `json:"signature"`
-	Sequence      int64            `json:"sequence"`
 }
 
 // logic for standard transaction decoding
@@ -156,5 +214,12 @@ func DefaultTxDecoder(cdc *codec.Codec) sdk.TxDecoder {
 		}
 
 		return tx, nil
+	}
+}
+
+// logic for standard transaction encoding
+func DefaultTxEncoder(cdc *codec.Codec) sdk.TxEncoder {
+	return func(tx sdk.Tx) ([]byte, error) {
+		return cdc.MarshalJSON(tx)
 	}
 }

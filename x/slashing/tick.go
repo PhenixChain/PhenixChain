@@ -4,9 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	sdk "github.com/PhenixChain/PhenixChain/types"
 	abci "github.com/tendermint/tendermint/abci/types"
 	tmtypes "github.com/tendermint/tendermint/types"
+
+	sdk "github.com/PhenixChain/PhenixChain/types"
 )
 
 // slashing begin block functionality

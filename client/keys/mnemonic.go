@@ -4,8 +4,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/spf13/cobra"
+
+	"github.com/PhenixChain/PhenixChain/client"
 
 	bip39 "github.com/bartekn/go-bip39"
 )

@@ -2,11 +2,12 @@ package server
 
 import (
 	"fmt"
-	"github.com/PhenixChain/PhenixChain/client"
 	"io/ioutil"
 	"net"
 	"os"
 	"testing"
+
+	"github.com/PhenixChain/PhenixChain/client"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"

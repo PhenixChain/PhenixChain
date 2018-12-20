@@ -6,8 +6,13 @@ import (
 	sdk "github.com/PhenixChain/PhenixChain/types"
 )
 
-// name to idetify transaction types
-const MsgRoute = "gov"
+// Governance message types and routes
+const (
+	MsgRoute              = "gov"
+	TypeMsgDeposit        = "deposit"
+	TypeMsgVote           = "vote"
+	TypeMsgSubmitProposal = "submit_proposal"
+)
 
 var _, _, _ sdk.Msg = MsgSubmitProposal{}, MsgDeposit{}, MsgVote{}
 
@@ -33,7 +38,7 @@ func NewMsgSubmitProposal(title string, description string, proposalType Proposa
 
 //nolint
 func (msg MsgSubmitProposal) Route() string { return MsgRoute }
-func (msg MsgSubmitProposal) Type() string  { return "submit_proposal" }
+func (msg MsgSubmitProposal) Type() string  { return TypeMsgSubmitProposal }
 
 // Implements Msg.
 func (msg MsgSubmitProposal) ValidateBasic() sdk.Error {
@@ -85,14 +90,14 @@ func (msg MsgSubmitProposal) GetSigners() []sdk.AccAddress {
 // MsgDeposit
 type MsgDeposit struct {
 	ProposalID uint64         `json:"proposal_id"` // ID of the proposal
-	Depositer  sdk.AccAddress `json:"depositer"`   // Address of the depositer
+	Depositor  sdk.AccAddress `json:"depositor"`   // Address of the depositor
 	Amount     sdk.Coins      `json:"amount"`      // Coins to add to the proposal's deposit
 }
 
-func NewMsgDeposit(depositer sdk.AccAddress, proposalID uint64, amount sdk.Coins) MsgDeposit {
+func NewMsgDeposit(depositor sdk.AccAddress, proposalID uint64, amount sdk.Coins) MsgDeposit {
 	return MsgDeposit{
 		ProposalID: proposalID,
-		Depositer:  depositer,
+		Depositor:  depositor,
 		Amount:     amount,
 	}
 }
@@ -100,12 +105,12 @@ func NewMsgDeposit(depositer sdk.AccAddress, proposalID uint64, amount sdk.Coins
 // Implements Msg.
 // nolint
 func (msg MsgDeposit) Route() string { return MsgRoute }
-func (msg MsgDeposit) Type() string  { return "deposit" }
+func (msg MsgDeposit) Type() string  { return TypeMsgDeposit }
 
 // Implements Msg.
 func (msg MsgDeposit) ValidateBasic() sdk.Error {
-	if len(msg.Depositer) == 0 {
-		return sdk.ErrInvalidAddress(msg.Depositer.String())
+	if len(msg.Depositor) == 0 {
+		return sdk.ErrInvalidAddress(msg.Depositor.String())
 	}
 	if !msg.Amount.IsValid() {
 		return sdk.ErrInvalidCoins(msg.Amount.String())
@@ -120,7 +125,7 @@ func (msg MsgDeposit) ValidateBasic() sdk.Error {
 }
 
 func (msg MsgDeposit) String() string {
-	return fmt.Sprintf("MsgDeposit{%s=>%v: %v}", msg.Depositer, msg.ProposalID, msg.Amount)
+	return fmt.Sprintf("MsgDeposit{%s=>%v: %v}", msg.Depositor, msg.ProposalID, msg.Amount)
 }
 
 // Implements Msg.
@@ -139,7 +144,7 @@ func (msg MsgDeposit) GetSignBytes() []byte {
 
 // Implements Msg.
 func (msg MsgDeposit) GetSigners() []sdk.AccAddress {
-	return []sdk.AccAddress{msg.Depositer}
+	return []sdk.AccAddress{msg.Depositor}
 }
 
 //-----------------------------------------------------------
@@ -161,7 +166,7 @@ func NewMsgVote(voter sdk.AccAddress, proposalID uint64, option VoteOption) MsgV
 // Implements Msg.
 // nolint
 func (msg MsgVote) Route() string { return MsgRoute }
-func (msg MsgVote) Type() string  { return "vote" }
+func (msg MsgVote) Type() string  { return TypeMsgVote }
 
 // Implements Msg.
 func (msg MsgVote) ValidateBasic() sdk.Error {
