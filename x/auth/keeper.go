@@ -131,26 +131,6 @@ func (am AccountKeeper) setSequence(ctx sdk.Context, addr sdk.AccAddress, newSeq
 	return nil
 }
 
-// Returns and increments the global account number counter
-func (am AccountKeeper) GetNextAccountNumber(ctx sdk.Context) uint64 {
-	var accNumber uint64
-	store := ctx.KVStore(am.key)
-	bz := store.Get(globalAccountNumberKey)
-	if bz == nil {
-		accNumber = 0
-	} else {
-		err := am.cdc.UnmarshalBinaryLengthPrefixed(bz, &accNumber)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	bz = am.cdc.MustMarshalBinaryLengthPrefixed(accNumber + 1)
-	store.Set(globalAccountNumberKey, bz)
-
-	return accNumber
-}
-
 //----------------------------------------
 // misc.
 

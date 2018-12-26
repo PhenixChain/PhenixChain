@@ -39,12 +39,14 @@ type BasecoinApp struct {
 	// keys to access the multistore
 	keyMain    *sdk.KVStoreKey
 	keyAccount *sdk.KVStoreKey
+	keyAddress *sdk.KVStoreKey
 	keyIBC     *sdk.KVStoreKey
 
 	// manage getting and setting accounts
 	accountKeeper       auth.AccountKeeper
 	feeCollectionKeeper auth.FeeCollectionKeeper
 	bankKeeper          bank.Keeper
+	txKeeper            bank.TxKeeper
 	ibcMapper           ibc.Mapper
 }
 
@@ -63,6 +65,7 @@ func NewBasecoinApp(logger log.Logger, db dbm.DB, baseAppOptions ...func(*bam.Ba
 		BaseApp:    bam.NewBaseApp(appName, logger, db, auth.DefaultTxDecoder(cdc), baseAppOptions...),
 		keyMain:    sdk.NewKVStoreKey("main"),
 		keyAccount: sdk.NewKVStoreKey("acc"),
+		keyAddress: sdk.NewKVStoreKey("address"),
 		keyIBC:     sdk.NewKVStoreKey("ibc"),
 	}
 
@@ -74,7 +77,9 @@ func NewBasecoinApp(logger log.Logger, db dbm.DB, baseAppOptions ...func(*bam.Ba
 			return &AppAccount{}
 		},
 	)
-	app.bankKeeper = bank.NewBaseKeeper(app.accountKeeper)
+	app.txKeeper = bank.NewTxKeeper(cdc, app.keyAddress)
+	// add txKeeper --nikolas
+	app.bankKeeper = bank.NewBaseKeeper(app.accountKeeper, app.txKeeper)
 	app.ibcMapper = ibc.NewMapper(app.cdc, app.keyIBC, ibc.DefaultCodespace)
 
 	// register message routes
@@ -89,7 +94,7 @@ func NewBasecoinApp(logger log.Logger, db dbm.DB, baseAppOptions ...func(*bam.Ba
 	app.SetAnteHandler(auth.NewAnteHandler(app.accountKeeper, app.feeCollectionKeeper))
 
 	// mount the multistore and load the latest state
-	app.MountStores(app.keyMain, app.keyAccount, app.keyIBC)
+	app.MountStores(app.keyMain, app.keyAccount, app.keyAddress, app.keyIBC)
 	err := app.LoadLatestVersion(app.keyMain)
 	if err != nil {
 		cmn.Exit(err.Error())

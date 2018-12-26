@@ -1,10 +1,13 @@
 package bank
 
 import (
+	"encoding/hex"
 	"fmt"
 
+	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/PhenixChain/PhenixChain/x/auth"
+	"github.com/tendermint/tendermint/crypto/tmhash"
 )
 
 //-----------------------------------------------------------------------------
@@ -29,13 +32,16 @@ type BaseKeeper struct {
 	BaseSendKeeper
 
 	ak auth.AccountKeeper
+
+	tk TxKeeper
 }
 
 // NewBaseKeeper returns a new BaseKeeper
-func NewBaseKeeper(ak auth.AccountKeeper) BaseKeeper {
+func NewBaseKeeper(ak auth.AccountKeeper, tk TxKeeper) BaseKeeper {
 	return BaseKeeper{
-		BaseSendKeeper: NewBaseSendKeeper(ak),
+		BaseSendKeeper: NewBaseSendKeeper(ak, tk),
 		ak:             ak,
+		tk:             tk,
 	}
 }
 
@@ -49,7 +55,7 @@ func (keeper BaseKeeper) SubtractCoins(
 	ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins,
 ) (sdk.Coins, sdk.Tags, sdk.Error) {
 
-	return subtractCoins(ctx, keeper.ak, addr, amt)
+	return subtractCoins(ctx, keeper.ak, keeper.tk, addr, amt)
 }
 
 // AddCoins adds amt to the coins at the addr.
@@ -57,7 +63,7 @@ func (keeper BaseKeeper) AddCoins(
 	ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins,
 ) (sdk.Coins, sdk.Tags, sdk.Error) {
 
-	return addCoins(ctx, keeper.ak, addr, amt)
+	return addCoins(ctx, keeper.ak, keeper.tk, addr, amt)
 }
 
 // InputOutputCoins handles a list of inputs and outputs
@@ -65,7 +71,7 @@ func (keeper BaseKeeper) InputOutputCoins(
 	ctx sdk.Context, inputs []Input, outputs []Output,
 ) (sdk.Tags, sdk.Error) {
 
-	return inputOutputCoins(ctx, keeper.ak, inputs, outputs)
+	return inputOutputCoins(ctx, keeper, inputs, outputs)
 }
 
 //-----------------------------------------------------------------------------
@@ -87,13 +93,16 @@ type BaseSendKeeper struct {
 	BaseViewKeeper
 
 	ak auth.AccountKeeper
+
+	tk TxKeeper
 }
 
 // NewBaseSendKeeper returns a new BaseSendKeeper.
-func NewBaseSendKeeper(ak auth.AccountKeeper) BaseSendKeeper {
+func NewBaseSendKeeper(ak auth.AccountKeeper, tk TxKeeper) BaseSendKeeper {
 	return BaseSendKeeper{
 		BaseViewKeeper: NewBaseViewKeeper(ak),
 		ak:             ak,
+		tk:             tk,
 	}
 }
 
@@ -102,7 +111,7 @@ func (keeper BaseSendKeeper) SendCoins(
 	ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins,
 ) (sdk.Tags, sdk.Error) {
 
-	return sendCoins(ctx, keeper.ak, fromAddr, toAddr, amt)
+	return sendCoins(ctx, keeper, fromAddr, toAddr, amt)
 }
 
 //-----------------------------------------------------------------------------
@@ -169,7 +178,7 @@ func hasCoins(ctx sdk.Context, am auth.AccountKeeper, addr sdk.AccAddress, amt s
 }
 
 // SubtractCoins subtracts amt from the coins at the addr.
-func subtractCoins(ctx sdk.Context, am auth.AccountKeeper, addr sdk.AccAddress, amt sdk.Coins) (sdk.Coins, sdk.Tags, sdk.Error) {
+func subtractCoins(ctx sdk.Context, am auth.AccountKeeper, tk TxKeeper, addr sdk.AccAddress, amt sdk.Coins) (sdk.Coins, sdk.Tags, sdk.Error) {
 	oldCoins := getCoins(ctx, am, addr)
 	newCoins, hasNeg := oldCoins.SafeMinus(amt)
 	if hasNeg {
@@ -177,31 +186,35 @@ func subtractCoins(ctx sdk.Context, am auth.AccountKeeper, addr sdk.AccAddress, 
 	}
 
 	err := setCoins(ctx, am, addr, newCoins)
+	// nikolas
+	storeAddressTxHash(ctx, tk, addr)
 	tags := sdk.NewTags("sender", []byte(addr.String()))
 	return newCoins, tags, err
 }
 
 // AddCoins adds amt to the coins at the addr.
-func addCoins(ctx sdk.Context, am auth.AccountKeeper, addr sdk.AccAddress, amt sdk.Coins) (sdk.Coins, sdk.Tags, sdk.Error) {
+func addCoins(ctx sdk.Context, am auth.AccountKeeper, tk TxKeeper, addr sdk.AccAddress, amt sdk.Coins) (sdk.Coins, sdk.Tags, sdk.Error) {
 	oldCoins := getCoins(ctx, am, addr)
 	newCoins := oldCoins.Plus(amt)
 	if !newCoins.IsNotNegative() {
 		return amt, nil, sdk.ErrInsufficientCoins(fmt.Sprintf("%s < %s", oldCoins, amt))
 	}
 	err := setCoins(ctx, am, addr, newCoins)
+	// nikolas
+	storeAddressTxHash(ctx, tk, addr)
 	tags := sdk.NewTags("recipient", []byte(addr.String()))
 	return newCoins, tags, err
 }
 
 // SendCoins moves coins from one account to another
 // NOTE: Make sure to revert state changes from tx on error
-func sendCoins(ctx sdk.Context, am auth.AccountKeeper, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) (sdk.Tags, sdk.Error) {
-	_, subTags, err := subtractCoins(ctx, am, fromAddr, amt)
+func sendCoins(ctx sdk.Context, bsk BaseSendKeeper, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) (sdk.Tags, sdk.Error) {
+	_, subTags, err := subtractCoins(ctx, bsk.ak, bsk.tk, fromAddr, amt)
 	if err != nil {
 		return nil, err
 	}
 
-	_, addTags, err := addCoins(ctx, am, toAddr, amt)
+	_, addTags, err := addCoins(ctx, bsk.ak, bsk.tk, toAddr, amt)
 	if err != nil {
 		return nil, err
 	}
@@ -211,11 +224,11 @@ func sendCoins(ctx sdk.Context, am auth.AccountKeeper, fromAddr sdk.AccAddress, 
 
 // InputOutputCoins handles a list of inputs and outputs
 // NOTE: Make sure to revert state changes from tx on error
-func inputOutputCoins(ctx sdk.Context, am auth.AccountKeeper, inputs []Input, outputs []Output) (sdk.Tags, sdk.Error) {
+func inputOutputCoins(ctx sdk.Context, bk BaseKeeper, inputs []Input, outputs []Output) (sdk.Tags, sdk.Error) {
 	allTags := sdk.EmptyTags()
 
 	for _, in := range inputs {
-		_, tags, err := subtractCoins(ctx, am, in.Address, in.Coins)
+		_, tags, err := subtractCoins(ctx, bk.ak, bk.tk, in.Address, in.Coins)
 		if err != nil {
 			return nil, err
 		}
@@ -223,7 +236,7 @@ func inputOutputCoins(ctx sdk.Context, am auth.AccountKeeper, inputs []Input, ou
 	}
 
 	for _, out := range outputs {
-		_, tags, err := addCoins(ctx, am, out.Address, out.Coins)
+		_, tags, err := addCoins(ctx, bk.ak, bk.tk, out.Address, out.Coins)
 		if err != nil {
 			return nil, err
 		}
@@ -232,3 +245,60 @@ func inputOutputCoins(ctx sdk.Context, am auth.AccountKeeper, inputs []Input, ou
 
 	return allTags, nil
 }
+
+//#############################################################################################
+//<!-- < < < < < < < < < < < < < < < < < < < < < < < < < < < < < < < < < < < << < < ☺
+//v                  ✰  实现通过地址查找交易记录 ✰
+//v
+//v    保存address对应的txhash，每个地址最多保存最近的300个txhash
+//v                                                        --- nikolas
+//☺ > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > >  -->
+
+func storeAddressTxHash(ctx sdk.Context, tk TxKeeper, addr sdk.AccAddress) {
+	key := append([]byte{0x01}, addr.Bytes()...)
+	store := ctx.KVStore(tk.key)
+
+	// 取出历史数据
+	getTxs := []Tx{}
+	txHash := store.Get(key)
+	if txHash != nil {
+		if err := tk.cdc.UnmarshalJSON(txHash, &getTxs); err != nil {
+			panic(err)
+		}
+	}
+
+	hexStr := hex.EncodeToString(tmhash.Sum(ctx.TxBytes()))
+	tx := []Tx{Tx{hexStr}}
+	txs := []Tx{}
+
+	// 新数据插在历史数据前面
+	txs = append(tx, getTxs...)
+	if len(txs) > 310 {
+		// 数组长度最大暂定300
+		txs = txs[:300]
+	}
+	ay, err := tk.cdc.MarshalJSON(txs)
+	if err != nil {
+		panic(err)
+	}
+
+	store.Set(key, ay)
+}
+
+type Tx struct {
+	ID string `json:"tx"`
+}
+
+type TxKeeper struct {
+	key sdk.StoreKey
+	cdc *codec.Codec
+}
+
+func NewTxKeeper(cdc *codec.Codec, key sdk.StoreKey) TxKeeper {
+	return TxKeeper{
+		key: key,
+		cdc: cdc,
+	}
+}
+
+//#############################################################################################
