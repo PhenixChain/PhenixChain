@@ -1,7 +1,6 @@
 package slashing
 
 import (
-	"encoding/binary"
 	"fmt"
 
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -11,14 +10,9 @@ import (
 )
 
 // slashing begin block functionality
-func BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock, sk Keeper) (tags sdk.Tags) {
+func BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock, sk Keeper) sdk.Tags {
 
-	// Tag the height
-	heightBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(heightBytes, uint64(req.Header.Height))
-	tags = sdk.NewTags("height", heightBytes)
-
-	// Iterate over all the validators  which *should* have signed this block
+	// Iterate over all the validators which *should* have signed this block
 	// store whether or not they have actually signed it and slash/unbond any
 	// which have missed too many blocks in a row (downtime slashing)
 	for _, voteInfo := range req.LastCommitInfo.GetVotes() {
@@ -37,5 +31,5 @@ func BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock, sk Keeper) (tags 
 		}
 	}
 
-	return
+	return sdk.EmptyTags()
 }

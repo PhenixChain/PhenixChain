@@ -2,19 +2,20 @@ package app
 
 import (
 	"encoding/json"
-	"os"
 
-	bam "github.com/PhenixChain/PhenixChain/baseapp"
+	"github.com/tendermint/tendermint/libs/log"
+
 	"github.com/PhenixChain/PhenixChain/codec"
-	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/PhenixChain/PhenixChain/x/auth"
 	"github.com/PhenixChain/PhenixChain/x/bank"
-	"github.com/PhenixChain/PhenixChain/x/ibc"
+	"github.com/PhenixChain/PhenixChain/x/params"
+	"github.com/PhenixChain/PhenixChain/x/staking"
 
+	bam "github.com/PhenixChain/PhenixChain/baseapp"
+	sdk "github.com/PhenixChain/PhenixChain/types"
 	abci "github.com/tendermint/tendermint/abci/types"
 	cmn "github.com/tendermint/tendermint/libs/common"
 	dbm "github.com/tendermint/tendermint/libs/db"
-	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
@@ -22,157 +23,131 @@ const (
 	appName = "Phenix"
 )
 
-// default home directories for expected binaries
-var (
-	DefaultCLIHome  = os.ExpandEnv("$HOME/.phenixcli")
-	DefaultNodeHome = os.ExpandEnv("$HOME/.phenix")
-)
-
-// BasecoinApp implements an extended ABCI application. It contains a BaseApp,
-// a codec for serialization, KVStore keys for multistore state management, and
-// various mappers and keepers to manage getting, setting, and serializing the
-// integral app types.
-type BasecoinApp struct {
+type nameServiceApp struct {
 	*bam.BaseApp
 	cdc *codec.Codec
 
-	// keys to access the multistore
-	keyMain    *sdk.KVStoreKey
-	keyAccount *sdk.KVStoreKey
-	keyAddress *sdk.KVStoreKey
-	keyIBC     *sdk.KVStoreKey
+	keyMain          *sdk.KVStoreKey
+	keyAddress       *sdk.KVStoreKey
+	keyAccount       *sdk.KVStoreKey
+	keyFeeCollection *sdk.KVStoreKey
+	keyParams        *sdk.KVStoreKey
+	tkeyParams       *sdk.TransientStoreKey
 
-	// manage getting and setting accounts
 	accountKeeper       auth.AccountKeeper
-	feeCollectionKeeper auth.FeeCollectionKeeper
 	bankKeeper          bank.Keeper
 	txKeeper            bank.TxKeeper
-	ibcMapper           ibc.Mapper
+	feeCollectionKeeper auth.FeeCollectionKeeper
+	paramsKeeper        params.Keeper
 }
 
-// NewBasecoinApp returns a reference to a new BasecoinApp given a logger and
-// database. Internally, a codec is created along with all the necessary keys.
-// In addition, all necessary mappers and keepers are created, routes
-// registered, and finally the stores being mounted along with any necessary
-// chain initialization.
-func NewBasecoinApp(logger log.Logger, db dbm.DB, baseAppOptions ...func(*bam.BaseApp)) *BasecoinApp {
-	// create and register app-level codec for TXs and accounts
+// NewNameServiceApp is a constructor function for nameServiceApp
+func NewNameServiceApp(logger log.Logger, db dbm.DB) *nameServiceApp {
+
+	// First define the top level codec that will be shared by the different modules
 	cdc := MakeCodec()
 
-	// create your application type
-	var app = &BasecoinApp{
-		cdc:        cdc,
-		BaseApp:    bam.NewBaseApp(appName, logger, db, auth.DefaultTxDecoder(cdc), baseAppOptions...),
-		keyMain:    sdk.NewKVStoreKey("main"),
-		keyAccount: sdk.NewKVStoreKey("acc"),
-		keyAddress: sdk.NewKVStoreKey("address"),
-		keyIBC:     sdk.NewKVStoreKey("ibc"),
+	// BaseApp handles interactions with Tendermint through the ABCI protocol
+	bApp := bam.NewBaseApp(appName, logger, db, auth.DefaultTxDecoder(cdc))
+
+	// Here you initialize your application with the store keys it requires
+	var app = &nameServiceApp{
+		BaseApp: bApp,
+		cdc:     cdc,
+
+		keyMain:          sdk.NewKVStoreKey("main"),
+		keyAccount:       sdk.NewKVStoreKey("acc"),
+		keyAddress:       sdk.NewKVStoreKey("address"),
+		keyFeeCollection: sdk.NewKVStoreKey("fee_collection"),
+		keyParams:        sdk.NewKVStoreKey("params"),
+		tkeyParams:       sdk.NewTransientStoreKey("transient_params"),
 	}
 
-	// define and attach the mappers and keepers
+	// The ParamsKeeper handles parameter storage for the application
+	app.paramsKeeper = params.NewKeeper(app.cdc, app.keyParams, app.tkeyParams)
+
+	// The AccountKeeper handles address -> account lookups
 	app.accountKeeper = auth.NewAccountKeeper(
-		cdc,
-		app.keyAccount, // target store
-		func() auth.Account {
-			return &AppAccount{}
-		},
+		app.cdc,
+		app.keyAccount,
+		app.paramsKeeper.Subspace(auth.DefaultParamspace),
+		auth.ProtoBaseAccount,
 	)
-	app.txKeeper = bank.NewTxKeeper(cdc, app.keyAddress)
+
 	// add txKeeper --nikolas
-	app.bankKeeper = bank.NewBaseKeeper(app.accountKeeper, app.txKeeper)
-	app.ibcMapper = ibc.NewMapper(app.cdc, app.keyIBC, ibc.DefaultCodespace)
+	app.txKeeper = bank.NewTxKeeper(cdc, app.keyAddress)
+	// The BankKeeper allows you perform sdk.Coins interactions
+	app.bankKeeper = bank.NewBaseKeeper(
+		app.accountKeeper,
+		app.txKeeper,
+		app.paramsKeeper.Subspace(bank.DefaultParamspace),
+		bank.DefaultCodespace,
+	)
 
-	// register message routes
-	app.Router().
-		AddRoute("bank", bank.NewHandler(app.bankKeeper)).
-		AddRoute("ibc", ibc.NewHandler(app.ibcMapper, app.bankKeeper))
+	// The FeeCollectionKeeper collects transaction fees and renders them to the fee distribution module
+	app.feeCollectionKeeper = auth.NewFeeCollectionKeeper(cdc, app.keyFeeCollection)
 
-	// perform initialization logic
-	app.SetInitChainer(app.initChainer)
-	app.SetBeginBlocker(app.BeginBlocker)
-	app.SetEndBlocker(app.EndBlocker)
+	// The AnteHandler handles signature verification and transaction pre-processing
 	app.SetAnteHandler(auth.NewAnteHandler(app.accountKeeper, app.feeCollectionKeeper))
 
-	// mount the multistore and load the latest state
-	app.MountStores(app.keyMain, app.keyAccount, app.keyAddress, app.keyIBC)
+	// The app.Router is the main transaction router where each module registers its routes
+	// Register the bank routes here
+	app.Router().
+		AddRoute("bank", bank.NewHandler(app.bankKeeper))
+
+	// The initChainer handles translating the genesis.json file into initial state for the network
+	app.SetInitChainer(app.initChainer)
+
+	app.MountStores(
+		app.keyMain,
+		app.keyAccount,
+		app.keyAddress,
+		app.keyFeeCollection,
+		app.keyParams,
+		app.tkeyParams,
+	)
+
 	err := app.LoadLatestVersion(app.keyMain)
 	if err != nil {
 		cmn.Exit(err.Error())
 	}
 
-	app.Seal()
-
 	return app
 }
 
-// MakeCodec creates a new codec codec and registers all the necessary types
-// with the codec.
-func MakeCodec() *codec.Codec {
-	cdc := codec.New()
-
-	codec.RegisterCrypto(cdc)
-	sdk.RegisterCodec(cdc)
-	bank.RegisterCodec(cdc)
-	ibc.RegisterCodec(cdc)
-	auth.RegisterCodec(cdc)
-
-	// register custom type
-	cdc.RegisterConcrete(&AppAccount{}, "phenix/Account", nil)
-
-	cdc.Seal()
-
-	return cdc
+// GenesisState represents chain state at the start of the chain. Any initial state (account balances) are stored here.
+type GenesisState struct {
+	AuthData auth.GenesisState   `json:"auth"`
+	BankData bank.GenesisState   `json:"bank"`
+	Accounts []*auth.BaseAccount `json:"accounts"`
 }
 
-// BeginBlocker reflects logic to run before any TXs application are processed
-// by the application.
-func (app *BasecoinApp) BeginBlocker(_ sdk.Context, _ abci.RequestBeginBlock) abci.ResponseBeginBlock {
-	return abci.ResponseBeginBlock{}
-}
-
-// EndBlocker reflects logic to run after all TXs are processed by the
-// application.
-func (app *BasecoinApp) EndBlocker(_ sdk.Context, _ abci.RequestEndBlock) abci.ResponseEndBlock {
-	return abci.ResponseEndBlock{}
-}
-
-// initChainer implements the custom application logic that the BaseApp will
-// invoke upon initialization. In this case, it will take the application's
-// state provided by 'req' and attempt to deserialize said state. The state
-// should contain all the genesis accounts. These accounts will be added to the
-// application's account mapper.
-func (app *BasecoinApp) initChainer(ctx sdk.Context, req abci.RequestInitChain) abci.ResponseInitChain {
+func (app *nameServiceApp) initChainer(ctx sdk.Context, req abci.RequestInitChain) abci.ResponseInitChain {
 	stateJSON := req.AppStateBytes
 
 	genesisState := new(GenesisState)
 	err := app.cdc.UnmarshalJSON(stateJSON, genesisState)
 	if err != nil {
-		// TODO: https://github.com/cosmos/cosmos-sdk/issues/468
 		panic(err)
 	}
 
-	for _, gacc := range genesisState.Accounts {
-		acc, err := gacc.ToAppAccount()
-		if err != nil {
-			// TODO: https://github.com/cosmos/cosmos-sdk/issues/468
-			panic(err)
-		}
-
+	for _, acc := range genesisState.Accounts {
 		app.accountKeeper.SetAccount(ctx, acc)
 	}
+
+	auth.InitGenesis(ctx, app.accountKeeper, app.feeCollectionKeeper, genesisState.AuthData)
+	bank.InitGenesis(ctx, app.bankKeeper, genesisState.BankData)
 
 	return abci.ResponseInitChain{}
 }
 
-// ExportAppStateAndValidators implements custom application logic that exposes
-// various parts of the application's state and set of validators. An error is
-// returned if any step getting the state or set of validators fails.
-func (app *BasecoinApp) ExportAppStateAndValidators() (appState json.RawMessage, validators []tmtypes.GenesisValidator, err error) {
+// ExportAppStateAndValidators does the things
+func (app *nameServiceApp) ExportAppStateAndValidators() (appState json.RawMessage, validators []tmtypes.GenesisValidator, err error) {
 	ctx := app.NewContext(true, abci.Header{})
-	accounts := []*GenesisAccount{}
+	accounts := []*auth.BaseAccount{}
 
 	appendAccountsFn := func(acc auth.Account) bool {
-		account := &GenesisAccount{
+		account := &auth.BaseAccount{
 			Address: acc.GetAddress(),
 			Coins:   acc.GetCoins(),
 		}
@@ -183,13 +158,29 @@ func (app *BasecoinApp) ExportAppStateAndValidators() (appState json.RawMessage,
 
 	app.accountKeeper.IterateAccounts(ctx, appendAccountsFn)
 
-	genState := GenesisState{Accounts: accounts}
+	genState := GenesisState{
+		Accounts: accounts,
+		AuthData: auth.DefaultGenesisState(),
+		BankData: bank.DefaultGenesisState(),
+	}
+
 	appState, err = codec.MarshalJSONIndent(app.cdc, genState)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return appState, validators, err
+}
+
+// MakeCodec generates the necessary codecs for Amino
+func MakeCodec() *codec.Codec {
+	var cdc = codec.New()
+	auth.RegisterCodec(cdc)
+	bank.RegisterCodec(cdc)
+	staking.RegisterCodec(cdc)
+	sdk.RegisterCodec(cdc)
+	codec.RegisterCrypto(cdc)
+	return cdc
 }
 
 var _ auth.Account = (*AppAccount)(nil)
@@ -223,7 +214,7 @@ func GetAccountDecoder(cdc *codec.Codec) auth.AccountDecoder {
 		}
 
 		acct := new(AppAccount)
-		//nikolas
+		// nikolas
 		err := cdc.UnmarshalJSON(accBytes, &acct)
 		if err != nil {
 			panic(err)
@@ -231,11 +222,6 @@ func GetAccountDecoder(cdc *codec.Codec) auth.AccountDecoder {
 
 		return acct, err
 	}
-}
-
-// GenesisState reflects the genesis state of the application.
-type GenesisState struct {
-	Accounts []*GenesisAccount `json:"accounts"`
 }
 
 // GenesisAccount reflects a genesis account the application expects in it's

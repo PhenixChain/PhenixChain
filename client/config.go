@@ -22,13 +22,28 @@ var configDefaults map[string]string
 
 func init() {
 	configDefaults = map[string]string{
-		"chain_id": "",
+		"chain-id": "",
 		"output":   "text",
 		"node":     "tcp://localhost:26657",
 	}
 }
 
 // ConfigCmd returns a CLI command to interactively create a
+// Gaia CLI config file.
+func ConfigCmd(defaultCLIHome string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "config <key> [value]",
+		Short: "Create or query a Gaia CLI configuration file",
+		RunE:  runConfigCmd,
+		Args:  cobra.RangeArgs(0, 2),
+	}
+
+	cmd.Flags().String(cli.HomeFlag, defaultCLIHome,
+		"set client's home directory for configuration")
+	cmd.Flags().Bool(flagGet, false,
+		"print configuration value or its default if unset")
+	return cmd
+}
 
 func runConfigCmd(cmd *cobra.Command, args []string) error {
 	cfgFile, err := ensureConfFile(viper.GetString(cli.HomeFlag))
@@ -61,7 +76,7 @@ func runConfigCmd(cmd *cobra.Command, args []string) error {
 	// Get value action
 	if getAction {
 		switch key {
-		case "trace", "trust_node":
+		case "trace", "trust-node", "indent":
 			fmt.Println(tree.GetDefault(key, false).(bool))
 		default:
 			if defaultValue, ok := configDefaults[key]; ok {
@@ -74,11 +89,14 @@ func runConfigCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Set value action
+	if len(args) != 2 {
+		return fmt.Errorf("wrong number of arguments")
+	}
 	value := args[1]
 	switch key {
-	case "chain_id", "output", "node":
+	case "chain-id", "output", "node":
 		tree.Set(key, value)
-	case "trace", "trust_node":
+	case "trace", "trust-node", "indent":
 		boolVal, err := strconv.ParseBool(value)
 		if err != nil {
 			return err

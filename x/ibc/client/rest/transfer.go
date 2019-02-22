@@ -4,10 +4,11 @@ import (
 	"net/http"
 
 	"github.com/PhenixChain/PhenixChain/client/context"
-	"github.com/PhenixChain/PhenixChain/client/utils"
+	clientrest "github.com/PhenixChain/PhenixChain/client/rest"
 	"github.com/PhenixChain/PhenixChain/codec"
 	"github.com/PhenixChain/PhenixChain/crypto/keys"
 	sdk "github.com/PhenixChain/PhenixChain/types"
+	"github.com/PhenixChain/PhenixChain/types/rest"
 	"github.com/PhenixChain/PhenixChain/x/ibc"
 
 	"github.com/gorilla/mux"
@@ -19,8 +20,8 @@ func RegisterRoutes(cliCtx context.CLIContext, r *mux.Router, cdc *codec.Codec, 
 }
 
 type transferReq struct {
-	BaseReq utils.BaseReq `json:"base_req"`
-	Amount  sdk.Coins     `json:"amount"`
+	BaseReq rest.BaseReq `json:"base_req"`
+	Amount  sdk.Coins    `json:"amount"`
 }
 
 // TransferRequestHandler - http request handler to transfer coins to a address
@@ -33,36 +34,42 @@ func TransferRequestHandlerFn(cdc *codec.Codec, kb keys.Keybase, cliCtx context.
 
 		to, err := sdk.AccAddressFromBech32(bech32Addr)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
+			rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var req transferReq
-		err = utils.ReadRESTReq(w, r, cdc, &req)
-		if err != nil {
+		if !rest.ReadRESTReq(w, r, cdc, &req) {
 			return
 		}
 
-		cliCtx = cliCtx.WithGenerateOnly(req.BaseReq.GenerateOnly)
-		cliCtx = cliCtx.WithSimulation(req.BaseReq.Simulate)
-
-		baseReq := req.BaseReq.Sanitize()
-		if !baseReq.ValidateBasic(w, cliCtx) {
+		req.BaseReq = req.BaseReq.Sanitize()
+		if !req.BaseReq.ValidateBasic(w) {
 			return
 		}
 
-		info, err := kb.Get(baseReq.Name)
-		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusUnauthorized, err.Error())
-			return
+		var fromAddr sdk.AccAddress
+
+		if req.BaseReq.GenerateOnly {
+			// When generate only is supplied, the from field must be a valid Bech32
+			// address.
+			addr, err := sdk.AccAddressFromBech32(req.BaseReq.From)
+			if err != nil {
+				rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
+				return
+			}
+
+			fromAddr = addr
 		}
 
-		packet := ibc.NewIBCPacket(
-			sdk.AccAddress(info.GetPubKey().Address()), to,
-			req.Amount, baseReq.ChainID, destChainID,
-		)
+		packet := ibc.NewIBCPacket(fromAddr, to, req.Amount, req.BaseReq.ChainID, destChainID)
 		msg := ibc.IBCTransferMsg{IBCPacket: packet}
 
-		utils.CompleteAndBroadcastTxREST(w, r, cliCtx, baseReq, []sdk.Msg{msg}, cdc)
+		if req.BaseReq.GenerateOnly {
+			clientrest.WriteGenerateStdTxResponse(w, cdc, cliCtx, req.BaseReq, []sdk.Msg{msg})
+			return
+		}
+
+		clientrest.CompleteAndBroadcastTxREST(w, cliCtx, req.BaseReq, []sdk.Msg{msg}, cdc)
 	}
 }

@@ -1,17 +1,11 @@
 # Luanch Blockchain
 ## Generate genesis file
 ```
-./phenix init --name=<node name>
+./phenix init
 ```
-And you should see something like this:
+Add both accounts, with coins to the genesis file
 ```
-{
-  "chain_id": "phenix",
-  "node_id": "e14c5056212b5736e201dd1d64c89246f3288129",
-  "app_message": {
-    "secret": "pluck life bracket worry guilt wink upgrade olive tilt output reform census member trouble around abandon"
-  }
-}
+./phenix add-genesis-account <address> 10000000mycoin,666666coin1
 ```
 ## Start up the blockchain
 ```

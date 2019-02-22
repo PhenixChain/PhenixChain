@@ -3,26 +3,27 @@ package rest
 import (
 	"net/http"
 
+	"github.com/gorilla/mux"
+
 	"github.com/PhenixChain/PhenixChain/client/context"
-	"github.com/PhenixChain/PhenixChain/client/utils"
+	clientrest "github.com/PhenixChain/PhenixChain/client/rest"
 	"github.com/PhenixChain/PhenixChain/codec"
 	"github.com/PhenixChain/PhenixChain/crypto/keys"
 	sdk "github.com/PhenixChain/PhenixChain/types"
-	"github.com/PhenixChain/PhenixChain/x/bank"
-	"github.com/PhenixChain/PhenixChain/x/bank/client"
+	"github.com/PhenixChain/PhenixChain/types/rest"
 
-	"github.com/gorilla/mux"
+	"github.com/PhenixChain/PhenixChain/x/bank"
 )
 
 // RegisterRoutes - Central function to define routes that get registered by the main application
 func RegisterRoutes(cliCtx context.CLIContext, r *mux.Router, cdc *codec.Codec, kb keys.Keybase) {
 	r.HandleFunc("/bank/accounts/{address}/transfers", SendRequestHandlerFn(cdc, kb, cliCtx)).Methods("POST")
-	r.HandleFunc("/tx/broadcast", BroadcastTxRequestHandlerFn(cdc, cliCtx)).Methods("POST")
 }
 
-type sendReq struct {
-	BaseReq utils.BaseReq `json:"base_req"`
-	Amount  sdk.Coins     `json:"amount"`
+// SendReq defines the properties of a send request's body.
+type SendReq struct {
+	BaseReq rest.BaseReq `json:"base_req"`
+	Amount  sdk.Coins    `json:"amount"`
 }
 
 var msgCdc = codec.New()
@@ -37,33 +38,46 @@ func SendRequestHandlerFn(cdc *codec.Codec, kb keys.Keybase, cliCtx context.CLIC
 		vars := mux.Vars(r)
 		bech32Addr := vars["address"]
 
-		to, err := sdk.AccAddressFromBech32(bech32Addr)
+		toAddr, err := sdk.AccAddressFromBech32(bech32Addr)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
+			rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		var req sendReq
-		err = utils.ReadRESTReq(w, r, cdc, &req)
+		var req SendReq
+		if !rest.ReadRESTReq(w, r, cdc, &req) {
+			return
+		}
+
+		req.BaseReq = req.BaseReq.Sanitize()
+		if !req.BaseReq.ValidateBasic(w) {
+			return
+		}
+
+		if req.BaseReq.GenerateOnly {
+			// When generate only is supplied, the from field must be a valid Bech32
+			// address.
+			fromAddr, err := sdk.AccAddressFromBech32(req.BaseReq.From)
+			if err != nil {
+				rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
+				return
+			}
+
+			msg := bank.NewMsgSend(fromAddr, toAddr, req.Amount)
+			clientrest.WriteGenerateStdTxResponse(w, cdc, cliCtx, req.BaseReq, []sdk.Msg{msg})
+			return
+		}
+
+		// derive the from account address and name from the Keybase
+		fromAddress, fromName, err := context.GetFromFields(req.BaseReq.From)
 		if err != nil {
+			rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		cliCtx = cliCtx.WithGenerateOnly(req.BaseReq.GenerateOnly)
-		cliCtx = cliCtx.WithSimulation(req.BaseReq.Simulate)
+		cliCtx = cliCtx.WithFromName(fromName).WithFromAddress(fromAddress)
+		msg := bank.NewMsgSend(cliCtx.GetFromAddress(), toAddr, req.Amount)
 
-		baseReq := req.BaseReq.Sanitize()
-		if !baseReq.ValidateBasic(w, cliCtx) {
-			return
-		}
-
-		info, err := kb.Get(baseReq.Name)
-		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		msg := client.CreateMsg(sdk.AccAddress(info.GetPubKey().Address()), to, req.Amount)
-		utils.CompleteAndBroadcastTxREST(w, r, cliCtx, baseReq, []sdk.Msg{msg}, cdc)
+		clientrest.CompleteAndBroadcastTxREST(w, cliCtx, req.BaseReq, []sdk.Msg{msg}, cdc)
 	}
 }

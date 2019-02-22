@@ -4,31 +4,41 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
-
-	"github.com/tendermint/tendermint/p2p"
-
-	"github.com/PhenixChain/PhenixChain/app"
-	"github.com/PhenixChain/PhenixChain/baseapp"
+	"path/filepath"
+	"strings"
 
 	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/PhenixChain/PhenixChain/codec"
 	"github.com/PhenixChain/PhenixChain/server"
-
+	"github.com/PhenixChain/PhenixChain/x/auth"
+	"github.com/PhenixChain/PhenixChain/x/bank"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	abci "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/cli"
-	dbm "github.com/tendermint/tendermint/libs/db"
+	"github.com/tendermint/tendermint/libs/common"
 	"github.com/tendermint/tendermint/libs/log"
+
+	"github.com/PhenixChain/PhenixChain/app"
+	sdk "github.com/PhenixChain/PhenixChain/types"
+	abci "github.com/tendermint/tendermint/abci/types"
+	cfg "github.com/tendermint/tendermint/config"
+	dbm "github.com/tendermint/tendermint/libs/db"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
+// DefaultNodeHome sets the folder where the applcation data and configuration will be stored
+var DefaultNodeHome = os.ExpandEnv("$HOME/.phenix")
+
 const (
-	flagClientHome = "home-client"
+	flagOverwrite = "overwrite"
 )
 
 func main() {
+	cobra.EnableCommandSorting = false
+
 	cdc := app.MakeCodec()
 	ctx := server.NewDefaultContext()
 
@@ -39,92 +49,180 @@ func main() {
 	}
 
 	rootCmd.AddCommand(InitCmd(ctx, cdc))
+	rootCmd.AddCommand(AddGenesisAccountCmd(ctx, cdc))
 
-	server.AddCommands(ctx, cdc, rootCmd, newApp, exportAppStateAndTMValidators)
+	server.AddCommands(ctx, cdc, rootCmd, newApp, appExporter())
 
 	// prepare and add flags
-	rootDir := os.ExpandEnv("$HOME/.phenix")
-	executor := cli.PrepareBaseCmd(rootCmd, "BC", rootDir)
-
+	executor := cli.PrepareBaseCmd(rootCmd, "PC", DefaultNodeHome)
 	err := executor.Execute()
 	if err != nil {
-		// Note: Handle with #870
+		// handle with #870
 		panic(err)
 	}
 }
 
-// get cmd to initialize all files for tendermint and application
-// nolint: errcheck
+func newApp(logger log.Logger, db dbm.DB, traceStore io.Writer) abci.Application {
+	return app.NewNameServiceApp(logger, db)
+}
+
+func appExporter() server.AppExporter {
+	return func(logger log.Logger, db dbm.DB, _ io.Writer, _ int64, _ bool, _ []string) (
+		json.RawMessage, []tmtypes.GenesisValidator, error) {
+		dapp := app.NewNameServiceApp(logger, db)
+		return dapp.ExportAppStateAndValidators()
+	}
+}
+
+// InitCmd initializes all files for tendermint and application
 func InitCmd(ctx *server.Context, cdc *codec.Codec) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize genesis config, priv-validator file, and p2p-node file",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-
 			config := ctx.Config
 			config.SetRoot(viper.GetString(cli.HomeFlag))
+
 			chainID := viper.GetString(client.FlagChainID)
 			if chainID == "" {
 				chainID = "phenix"
 			}
 
-			nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
-			if err != nil {
-				return err
-			}
-			nodeID := string(nodeKey.ID())
-
-			pk := ReadOrCreatePrivValidator(config.PrivValidatorFile())
-			genTx, appMessage, validator, err := server.SimpleAppGenTx(cdc, pk)
+			_, pk, err := InitializeNodeValidatorFiles(config)
 			if err != nil {
 				return err
 			}
 
-			appState, err := server.SimpleAppGenState(cdc, tmtypes.GenesisDoc{}, []json.RawMessage{genTx})
-			if err != nil {
-				return err
-			}
-			appStateJSON, err := cdc.MarshalJSON(appState)
+			var appState json.RawMessage
+			genFile := config.GenesisFile()
 
-			if err != nil {
-				return err
+			if !viper.GetBool(flagOverwrite) && common.FileExists(genFile) {
+				return fmt.Errorf("genesis.json file already exists: %v", genFile)
 			}
 
-			toPrint := struct {
-				ChainID    string          `json:"chain_id"`
-				NodeID     string          `json:"node_id"`
-				AppMessage json.RawMessage `json:"app_message"`
-			}{
-				chainID,
-				nodeID,
-				appMessage,
+			genesis := app.GenesisState{
+				AuthData: auth.DefaultGenesisState(),
+				BankData: bank.DefaultGenesisState(),
 			}
-			out, err := codec.MarshalJSONIndent(cdc, toPrint)
+
+			appState, err = codec.MarshalJSONIndent(cdc, genesis)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "%s\n", string(out))
-			return ExportGenesisFile(config.GenesisFile(), chainID,
-				[]tmtypes.GenesisValidator{validator}, appStateJSON)
+
+			_, _, validator, err := SimpleAppGenTx(cdc, pk)
+			if err != nil {
+				return err
+			}
+
+			if err = ExportGenesisFile(genFile, chainID, []tmtypes.GenesisValidator{validator}, appState); err != nil {
+				return err
+			}
+
+			cfg.WriteConfigFile(filepath.Join(config.RootDir, "config", "config.toml"), config)
+
+			fmt.Printf("Initialized configuration and bootstrapping files in %s...\n", viper.GetString(cli.HomeFlag))
+			return nil
 		},
 	}
 
-	cmd.Flags().String(cli.HomeFlag, app.DefaultNodeHome, "node's home directory")
-	cmd.Flags().String(flagClientHome, app.DefaultCLIHome, "client's home directory")
-	cmd.Flags().String(client.FlagChainID, "",
-		"genesis file chain-id, if left blank will be randomly created")
-	cmd.Flags().String(client.FlagName, "", "validator's moniker")
-	cmd.MarkFlagRequired(client.FlagName)
+	cmd.Flags().String(cli.HomeFlag, DefaultNodeHome, "node's home directory")
+	cmd.Flags().String(client.FlagChainID, "", "genesis file chain-id, if left blank will be randomly created")
+	cmd.Flags().BoolP(flagOverwrite, "o", false, "overwrite the genesis.json file")
+
 	return cmd
 }
 
-func newApp(logger log.Logger, db dbm.DB, storeTracer io.Writer) abci.Application {
-	return app.NewBasecoinApp(logger, db, baseapp.SetPruning(viper.GetString("pruning")))
+// SimpleAppGenTx returns a simple GenTx command that makes the node a valdiator from the start
+func SimpleAppGenTx(cdc *codec.Codec, pk crypto.PubKey) (
+	appGenTx, cliPrint json.RawMessage, validator tmtypes.GenesisValidator, err error) {
+
+	addr, secret, err := server.GenerateCoinKey()
+	if err != nil {
+		return
+	}
+
+	bz, err := cdc.MarshalJSON(struct {
+		Addr sdk.AccAddress `json:"addr"`
+	}{addr})
+	if err != nil {
+		return
+	}
+
+	appGenTx = json.RawMessage(bz)
+
+	bz, err = cdc.MarshalJSON(map[string]string{"secret": secret})
+	if err != nil {
+		return
+	}
+
+	cliPrint = json.RawMessage(bz)
+
+	validator = tmtypes.GenesisValidator{
+		PubKey: pk,
+		Power:  10000,
+	}
+
+	return
 }
 
-func exportAppStateAndTMValidators(logger log.Logger, db dbm.DB, _ io.Writer, _ int64, _ bool) (
-	json.RawMessage, []tmtypes.GenesisValidator, error) {
-	bapp := app.NewBasecoinApp(logger, db)
-	return bapp.ExportAppStateAndValidators()
+// AddGenesisAccountCmd allows users to add accounts to the genesis file
+func AddGenesisAccountCmd(ctx *server.Context, cdc *codec.Codec) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "add-genesis-account [address] [coins[,coins]]",
+		Short: "Adds an account to the genesis file",
+		Args:  cobra.ExactArgs(2),
+		Long: strings.TrimSpace(`
+Adds accounts to the genesis file so that you can start a chain with coins in the CLI:
+$ phenix add-genesis-account adr1tse7r2fadvlrrgau3pa0ss7cqh55wrv6y9alwh 1000STAKE,1000mycoin
+`),
+		RunE: func(_ *cobra.Command, args []string) error {
+			addr, err := sdk.AccAddressFromBech32(args[0])
+			if err != nil {
+				return err
+			}
+			coins, err := sdk.ParseCoins(args[1])
+			if err != nil {
+				return err
+			}
+			coins.Sort()
+
+			var genDoc tmtypes.GenesisDoc
+			config := ctx.Config
+			genFile := config.GenesisFile()
+			if !common.FileExists(genFile) {
+				return fmt.Errorf("%s does not exist, run `gaiad init` first", genFile)
+			}
+			genContents, err := ioutil.ReadFile(genFile)
+			if err != nil {
+			}
+
+			if err = cdc.UnmarshalJSON(genContents, &genDoc); err != nil {
+				return err
+			}
+
+			var appState app.GenesisState
+			if err = cdc.UnmarshalJSON(genDoc.AppState, &appState); err != nil {
+				return err
+			}
+
+			for _, stateAcc := range appState.Accounts {
+				if stateAcc.Address.Equals(addr) {
+					return fmt.Errorf("the application state already contains account %v", addr)
+				}
+			}
+
+			acc := auth.NewBaseAccountWithAddress(addr)
+			acc.Coins = coins
+			appState.Accounts = append(appState.Accounts, &acc)
+			appStateJSON, err := cdc.MarshalJSON(appState)
+			if err != nil {
+				return err
+			}
+
+			return ExportGenesisFile(genFile, genDoc.ChainID, genDoc.Validators, appStateJSON)
+		},
+	}
+	return cmd
 }

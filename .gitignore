@@ -1,4 +1,6 @@
 .DS_Store
+.vscode
+go.sum
 vendor/
 phenix/phenix
 phenixcli/phenixcli

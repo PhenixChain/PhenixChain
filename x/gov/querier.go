@@ -181,6 +181,7 @@ func queryDeposits(ctx sdk.Context, path []string, req abci.RequestQuery, keeper
 
 	var deposits []Deposit
 	depositsIterator := keeper.GetDeposits(ctx, params.ProposalID)
+	defer depositsIterator.Close()
 	for ; depositsIterator.Valid(); depositsIterator.Next() {
 		deposit := Deposit{}
 		keeper.cdc.MustUnmarshalBinaryLengthPrefixed(depositsIterator.Value(), &deposit)
@@ -214,7 +215,7 @@ func queryTally(ctx sdk.Context, path []string, req abci.RequestQuery, keeper Ke
 	if proposal.GetStatus() == StatusDepositPeriod {
 		tallyResult = EmptyTallyResult()
 	} else if proposal.GetStatus() == StatusPassed || proposal.GetStatus() == StatusRejected {
-		tallyResult = proposal.GetTallyResult()
+		tallyResult = proposal.GetFinalTallyResult()
 	} else {
 		// proposal is in voting period
 		_, tallyResult = tally(ctx, keeper, proposal)
@@ -238,6 +239,7 @@ func queryVotes(ctx sdk.Context, path []string, req abci.RequestQuery, keeper Ke
 
 	var votes []Vote
 	votesIterator := keeper.GetVotes(ctx, params.ProposalID)
+	defer votesIterator.Close()
 	for ; votesIterator.Valid(); votesIterator.Next() {
 		vote := Vote{}
 		keeper.cdc.MustUnmarshalBinaryLengthPrefixed(votesIterator.Value(), &vote)

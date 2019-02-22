@@ -8,8 +8,6 @@ import (
 	sdk "github.com/PhenixChain/PhenixChain/types"
 )
 
-// TODO remove some of these prefixes once have working multistore
-
 // Key for getting a the next available proposalID from the store
 var (
 	KeyDelimiter = []byte(":")

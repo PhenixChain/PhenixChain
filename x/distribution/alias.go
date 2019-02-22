@@ -11,63 +11,31 @@ type (
 	Keeper = keeper.Keeper
 	Hooks  = keeper.Hooks
 
-	DelegatorWithdrawInfo = types.DelegatorWithdrawInfo
-	DelegationDistInfo    = types.DelegationDistInfo
-	ValidatorDistInfo     = types.ValidatorDistInfo
-	TotalAccum            = types.TotalAccum
-	FeePool               = types.FeePool
-	DecCoin               = types.DecCoin
-	DecCoins              = types.DecCoins
-
 	MsgSetWithdrawAddress          = types.MsgSetWithdrawAddress
-	MsgWithdrawDelegatorRewardsAll = types.MsgWithdrawDelegatorRewardsAll
 	MsgWithdrawDelegatorReward     = types.MsgWithdrawDelegatorReward
-	MsgWithdrawValidatorRewardsAll = types.MsgWithdrawValidatorRewardsAll
+	MsgWithdrawValidatorCommission = types.MsgWithdrawValidatorCommission
 
 	GenesisState = types.GenesisState
 
 	// expected keepers
-	StakeKeeper         = types.StakeKeeper
+	StakingKeeper       = types.StakingKeeper
 	BankKeeper          = types.BankKeeper
 	FeeCollectionKeeper = types.FeeCollectionKeeper
-)
 
-var (
-	NewKeeper = keeper.NewKeeper
-
-	GetValidatorDistInfoKey     = keeper.GetValidatorDistInfoKey
-	GetDelegationDistInfoKey    = keeper.GetDelegationDistInfoKey
-	GetDelegationDistInfosKey   = keeper.GetDelegationDistInfosKey
-	GetDelegatorWithdrawAddrKey = keeper.GetDelegatorWithdrawAddrKey
-	FeePoolKey                  = keeper.FeePoolKey
-	ValidatorDistInfoKey        = keeper.ValidatorDistInfoKey
-	DelegationDistInfoKey       = keeper.DelegationDistInfoKey
-	DelegatorWithdrawInfoKey    = keeper.DelegatorWithdrawInfoKey
-	ProposerKey                 = keeper.ProposerKey
-	DefaultParamspace           = keeper.DefaultParamspace
-
-	InitialFeePool = types.InitialFeePool
-
-	NewGenesisState              = types.NewGenesisState
-	ValidateGenesis              = types.ValidateGenesis
-	DefaultGenesisState          = types.DefaultGenesisState
-	DefaultGenesisWithValidators = types.DefaultGenesisWithValidators
-
-	RegisterCodec = types.RegisterCodec
-
-	NewMsgSetWithdrawAddress          = types.NewMsgSetWithdrawAddress
-	NewMsgWithdrawDelegatorRewardsAll = types.NewMsgWithdrawDelegatorRewardsAll
-	NewMsgWithdrawDelegatorReward     = types.NewMsgWithdrawDelegatorReward
-	NewMsgWithdrawValidatorRewardsAll = types.NewMsgWithdrawValidatorRewardsAll
-
-	NewDecCoins = types.NewDecCoins
-
-	NewTotalAccum = types.NewTotalAccum
+	// querier param types
+	QueryValidatorCommissionParams   = keeper.QueryValidatorCommissionParams
+	QueryValidatorSlashesParams      = keeper.QueryValidatorSlashesParams
+	QueryDelegationRewardsParams     = keeper.QueryDelegationRewardsParams
+	QueryDelegatorWithdrawAddrParams = keeper.QueryDelegatorWithdrawAddrParams
 )
 
 const (
 	DefaultCodespace = types.DefaultCodespace
 	CodeInvalidInput = types.CodeInvalidInput
+	StoreKey         = types.StoreKey
+	TStoreKey        = types.TStoreKey
+	RouterKey        = types.RouterKey
+	QuerierRoute     = types.QuerierRoute
 )
 
 var (
@@ -77,4 +45,22 @@ var (
 
 	TagValidator = tags.Validator
 	TagDelegator = tags.Delegator
+
+	NewMsgSetWithdrawAddress          = types.NewMsgSetWithdrawAddress
+	NewMsgWithdrawDelegatorReward     = types.NewMsgWithdrawDelegatorReward
+	NewMsgWithdrawValidatorCommission = types.NewMsgWithdrawValidatorCommission
+
+	NewKeeper                           = keeper.NewKeeper
+	NewQuerier                          = keeper.NewQuerier
+	NewQueryValidatorCommissionParams   = keeper.NewQueryValidatorCommissionParams
+	NewQueryValidatorSlashesParams      = keeper.NewQueryValidatorSlashesParams
+	NewQueryDelegationRewardsParams     = keeper.NewQueryDelegationRewardsParams
+	NewQueryDelegatorParams             = keeper.NewQueryDelegatorParams
+	NewQueryDelegatorWithdrawAddrParams = keeper.NewQueryDelegatorWithdrawAddrParams
+	DefaultParamspace                   = keeper.DefaultParamspace
+
+	RegisterCodec       = types.RegisterCodec
+	DefaultGenesisState = types.DefaultGenesisState
+	ValidateGenesis     = types.ValidateGenesis
+	InitialFeePool      = types.InitialFeePool
 )

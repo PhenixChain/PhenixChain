@@ -145,6 +145,13 @@ func minint(i1, i2 int64) int64 {
 	return i2
 }
 
+func maxint(i1, i2 int64) int64 {
+	if i1 > i2 {
+		return i1
+	}
+	return i2
+}
+
 func TestArithInt(t *testing.T) {
 	for d := 0; d < 1000; d++ {
 		n1 := int64(rand.Int31())
@@ -165,6 +172,7 @@ func TestArithInt(t *testing.T) {
 			{i1.MulRaw(n2), n1 * n2},
 			{i1.DivRaw(n2), n1 / n2},
 			{MinInt(i1, i2), minint(n1, n2)},
+			{MaxInt(i1, i2), maxint(n1, n2)},
 			{i1.Neg(), -n1},
 		}
 
@@ -226,6 +234,13 @@ func minuint(i1, i2 uint64) uint64 {
 	return i2
 }
 
+func maxuint(i1, i2 uint64) uint64 {
+	if i1 > i2 {
+		return i1
+	}
+	return i2
+}
+
 func TestArithUint(t *testing.T) {
 	for d := 0; d < 1000; d++ {
 		n1 := uint64(rand.Uint32())
@@ -244,6 +259,7 @@ func TestArithUint(t *testing.T) {
 			{i1.MulRaw(n2), n1 * n2},
 			{i1.DivRaw(n2), n1 / n2},
 			{MinUint(i1, i2), minuint(n1, n2)},
+			{MaxUint(i1, i2), maxuint(n1, n2)},
 		}
 
 		for tcnum, tc := range cases {
@@ -616,27 +632,22 @@ func TestSafeSub(t *testing.T) {
 	}
 }
 
-func TestAddUint64Overflow(t *testing.T) {
-	testCases := []struct {
-		a, b     uint64
-		result   uint64
-		overflow bool
-	}{
-		{0, 0, 0, false},
-		{100, 100, 200, false},
-		{math.MaxUint64 / 2, math.MaxUint64/2 + 1, math.MaxUint64, false},
-		{math.MaxUint64 / 2, math.MaxUint64/2 + 2, 0, true},
-	}
+func TestSerializationOverflow(t *testing.T) {
+	bx, _ := new(big.Int).SetString("91888242871839275229946405745257275988696311157297823662689937894645226298583", 10)
+	x := Int{bx}
+	y := new(Int)
 
-	for i, tc := range testCases {
-		res, overflow := AddUint64Overflow(tc.a, tc.b)
-		require.Equal(
-			t, tc.overflow, overflow,
-			"invalid overflow result; tc: #%d, a: %d, b: %d", i, tc.a, tc.b,
-		)
-		require.Equal(
-			t, tc.result, res,
-			"invalid uint64 result; tc: #%d, a: %d, b: %d", i, tc.a, tc.b,
-		)
-	}
+	// require amino deserialization to fail due to overflow
+	xStr, err := x.MarshalAmino()
+	require.NoError(t, err)
+
+	err = y.UnmarshalAmino(xStr)
+	require.Error(t, err)
+
+	// require JSON deserialization to fail due to overflow
+	bz, err := x.MarshalJSON()
+	require.NoError(t, err)
+
+	err = y.UnmarshalJSON(bz)
+	require.Error(t, err)
 }

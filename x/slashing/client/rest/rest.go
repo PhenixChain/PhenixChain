@@ -1,11 +1,11 @@
 package rest
 
 import (
+	"github.com/gorilla/mux"
+
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/codec"
 	"github.com/PhenixChain/PhenixChain/crypto/keys"
-
-	"github.com/gorilla/mux"
 )
 
 // RegisterRoutes registers staking-related REST handlers to a router

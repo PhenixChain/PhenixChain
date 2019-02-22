@@ -1,11 +1,16 @@
 package gov
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
 	sdk "github.com/PhenixChain/PhenixChain/types"
-	stakeTypes "github.com/PhenixChain/PhenixChain/x/stake/types"
+)
+
+const (
+	// Default period for deposits & voting
+	DefaultPeriod time.Duration = 86400 * 2 * time.Second // 2 days
 )
 
 // GenesisState - all staking state that must be provided at genesis
@@ -42,14 +47,15 @@ func NewGenesisState(startingProposalID uint64, dp DepositParams, vp VotingParam
 
 // get raw genesis raw message for testing
 func DefaultGenesisState() GenesisState {
+	minDepositTokens := sdk.TokensFromTendermintPower(10)
 	return GenesisState{
 		StartingProposalID: 1,
 		DepositParams: DepositParams{
-			MinDeposit:       sdk.Coins{sdk.NewInt64Coin(stakeTypes.DefaultBondDenom, 10)},
-			MaxDepositPeriod: time.Duration(172800) * time.Second,
+			MinDeposit:       sdk.Coins{sdk.NewCoin(sdk.DefaultBondDenom, minDepositTokens)},
+			MaxDepositPeriod: DefaultPeriod,
 		},
 		VotingParams: VotingParams{
-			VotingPeriod: time.Duration(172800) * time.Second,
+			VotingPeriod: DefaultPeriod,
 		},
 		TallyParams: TallyParams{
 			Quorum:            sdk.NewDecWithPrec(334, 3),
@@ -60,7 +66,20 @@ func DefaultGenesisState() GenesisState {
 	}
 }
 
-// ValidateGenesis TODO https://github.com/cosmos/cosmos-sdk/issues/3007
+// Checks whether 2 GenesisState structs are equivalent.
+func (data GenesisState) Equal(data2 GenesisState) bool {
+	b1 := msgCdc.MustMarshalBinaryBare(data)
+	b2 := msgCdc.MustMarshalBinaryBare(data2)
+	return bytes.Equal(b1, b2)
+}
+
+// Returns if a GenesisState is empty or has data in it
+func (data GenesisState) IsEmpty() bool {
+	emptyGenState := GenesisState{}
+	return data.Equal(emptyGenState)
+}
+
+// ValidateGenesis
 func ValidateGenesis(data GenesisState) error {
 	threshold := data.TallyParams.Threshold
 	if threshold.IsNegative() || threshold.GT(sdk.OneDec()) {
@@ -110,6 +129,12 @@ func InitGenesis(ctx sdk.Context, k Keeper, data GenesisState) {
 		k.setVote(ctx, vote.ProposalID, vote.Vote.Voter, vote.Vote)
 	}
 	for _, proposal := range data.Proposals {
+		switch proposal.GetStatus() {
+		case StatusDepositPeriod:
+			k.InsertInactiveProposalQueue(ctx, proposal.GetDepositEndTime(), proposal.GetProposalID())
+		case StatusVotingPeriod:
+			k.InsertActiveProposalQueue(ctx, proposal.GetVotingEndTime(), proposal.GetProposalID())
+		}
 		k.SetProposal(ctx, proposal)
 	}
 }
@@ -126,12 +151,14 @@ func ExportGenesis(ctx sdk.Context, k Keeper) GenesisState {
 	for _, proposal := range proposals {
 		proposalID := proposal.GetProposalID()
 		depositsIterator := k.GetDeposits(ctx, proposalID)
+		defer depositsIterator.Close()
 		for ; depositsIterator.Valid(); depositsIterator.Next() {
 			var deposit Deposit
 			k.cdc.MustUnmarshalBinaryLengthPrefixed(depositsIterator.Value(), &deposit)
 			deposits = append(deposits, DepositWithMetadata{proposalID, deposit})
 		}
 		votesIterator := k.GetVotes(ctx, proposalID)
+		defer votesIterator.Close()
 		for ; votesIterator.Valid(); votesIterator.Next() {
 			var vote Vote
 			k.cdc.MustUnmarshalBinaryLengthPrefixed(votesIterator.Value(), &vote)

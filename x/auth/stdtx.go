@@ -46,30 +46,22 @@ func (tx StdTx) ValidateBasic() sdk.Error {
 	if tx.Fee.Gas > maxGasWanted {
 		return sdk.ErrGasOverflow(fmt.Sprintf("invalid gas supplied; %d > %d", tx.Fee.Gas, maxGasWanted))
 	}
-	if !tx.Fee.Amount.IsNotNegative() {
+	if tx.Fee.Amount.IsAnyNegative() {
 		return sdk.ErrInsufficientFee(fmt.Sprintf("invalid fee %s amount provided", tx.Fee.Amount))
 	}
 	if len(stdSigs) == 0 {
-		return sdk.ErrUnauthorized("no signers")
+		return sdk.ErrNoSignatures("no signers")
 	}
 	if len(stdSigs) != len(tx.GetSigners()) {
 		return sdk.ErrUnauthorized("wrong number of signers")
-	}
-	if len(tx.GetMemo()) > maxMemoCharacters {
-		return sdk.ErrMemoTooLarge(
-			fmt.Sprintf(
-				"maximum number of characters is %d but received %d characters",
-				maxMemoCharacters, len(tx.GetMemo()),
-			),
-		)
 	}
 
 	sigCount := 0
 	for i := 0; i < len(stdSigs); i++ {
 		sigCount += countSubKeys(stdSigs[i].PubKey)
-		if sigCount > txSigLimit {
+		if uint64(sigCount) > DefaultTxSigLimit {
 			return sdk.ErrTooManySignatures(
-				fmt.Sprintf("signatures: %d, limit: %d", sigCount, txSigLimit),
+				fmt.Sprintf("signatures: %d, limit: %d", sigCount, DefaultTxSigLimit),
 			)
 		}
 	}
@@ -77,8 +69,9 @@ func (tx StdTx) ValidateBasic() sdk.Error {
 	return nil
 }
 
+// countSubKeys counts the total number of keys for a multi-sig public key.
 func countSubKeys(pub crypto.PubKey) int {
-	v, ok := pub.(*multisig.PubKeyMultisigThreshold)
+	v, ok := pub.(multisig.PubKeyMultisigThreshold)
 	if !ok {
 		return 1
 	}
@@ -110,10 +103,10 @@ func (tx StdTx) GetSigners() []sdk.AccAddress {
 	return signers
 }
 
-//nolint
+// GetMemo returns the memo
 func (tx StdTx) GetMemo() string { return tx.Memo }
 
-// Signatures returns the signature of signers who signed the Msg.
+// GetSignatures returns the signature of signers who signed the Msg.
 // GetSignatures returns the signature of signers who signed the Msg.
 // CONTRACT: Length returned is same as length of
 // pubkeys returned from MsgKeySigners, and the order
@@ -133,14 +126,15 @@ type StdFee struct {
 	Gas    uint64    `json:"gas"`
 }
 
-func NewStdFee(gas uint64, amount ...sdk.Coin) StdFee {
+// NewStdFee returns a new instance of StdFee
+func NewStdFee(gas uint64, amount sdk.Coins) StdFee {
 	return StdFee{
 		Amount: amount,
 		Gas:    gas,
 	}
 }
 
-// fee bytes for signing later
+// Bytes for signing later
 func (fee StdFee) Bytes() []byte {
 	// normalize. XXX
 	// this is a sign of something ugly
@@ -190,13 +184,13 @@ func StdSignBytes(chainID string, sequence uint64, fee StdFee, msgs []sdk.Msg, m
 	return sdk.MustSortJSON(bz)
 }
 
-// Standard Signature
+// StdSignature represents a sig
 type StdSignature struct {
 	crypto.PubKey `json:"pub_key"` // optional
 	Signature     []byte           `json:"signature"`
 }
 
-// logic for standard transaction decoding
+// DefaultTxDecoder logic for standard transaction decoding
 func DefaultTxDecoder(cdc *codec.Codec) sdk.TxDecoder {
 	return func(txBytes []byte) (sdk.Tx, sdk.Error) {
 		var tx = StdTx{}
@@ -207,19 +201,20 @@ func DefaultTxDecoder(cdc *codec.Codec) sdk.TxDecoder {
 
 		// StdTx.Msg is an interface. The concrete types
 		// are registered by MakeTxCodec
-		//nikolas
+		// nikolas
 		err := cdc.UnmarshalJSON(txBytes, &tx)
 		if err != nil {
-			return nil, sdk.ErrTxDecode("").TraceSDK(err.Error())
+			return nil, sdk.ErrTxDecode("error decoding transaction").TraceSDK(err.Error())
 		}
 
 		return tx, nil
 	}
 }
 
-// logic for standard transaction encoding
+// DefaultTxEncoder logic for standard transaction encoding
 func DefaultTxEncoder(cdc *codec.Codec) sdk.TxEncoder {
 	return func(tx sdk.Tx) ([]byte, error) {
+		// nikolas
 		return cdc.MarshalJSON(tx)
 	}
 }

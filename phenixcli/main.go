@@ -1,7 +1,11 @@
 package main
 
 import (
+	"os"
+	"path"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	amino "github.com/tendermint/go-amino"
 	"github.com/tendermint/tendermint/libs/cli"
@@ -26,6 +30,8 @@ const (
 	storeAcc = "acc"
 )
 
+var defaultCLIHome = os.ExpandEnv("$HOME/.phenixcli")
+
 func main() {
 	cobra.EnableCommandSorting = false
 
@@ -40,13 +46,19 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:   "phenixcli",
-		Short: "PhenixChain light-client",
+		Short: "PhenixChain Client",
+	}
+
+	// Add --chain-id to persistent flags and mark it required
+	rootCmd.PersistentFlags().String(client.FlagChainID, "", "Chain ID of tendermint node")
+	rootCmd.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+		return initConfig(rootCmd)
 	}
 
 	// Construct Root Command
 	rootCmd.AddCommand(
-		rpc.InitClientCommand(),
 		rpc.StatusCommand(),
+		client.ConfigCmd(defaultCLIHome),
 		queryCmd(cdc),
 		txCmd(cdc),
 		client.LineBreak,
@@ -57,7 +69,7 @@ func main() {
 		version.VersionCmd,
 	)
 
-	executor := cli.PrepareMainCmd(rootCmd, "BC", app.DefaultCLIHome)
+	executor := cli.PrepareMainCmd(rootCmd, "PC", defaultCLIHome)
 	err := executor.Execute()
 	if err != nil {
 		panic(err)
@@ -72,7 +84,7 @@ func queryCmd(cdc *amino.Codec) *cobra.Command {
 	}
 
 	queryCmd.AddCommand(
-		rpc.ValidatorCommand(),
+		rpc.ValidatorCommand(cdc),
 		rpc.BlockCommand(),
 		tx.SearchTxCmd(cdc),
 		tx.QueryTxCmd(cdc),
@@ -93,11 +105,34 @@ func txCmd(cdc *amino.Codec) *cobra.Command {
 		bankcmd.SendTxCmd(cdc),
 		client.LineBreak,
 		authcmd.GetSignCommand(cdc),
-		bankcmd.GetBroadcastCommand(cdc),
+		authcmd.GetBroadcastCommand(cdc),
 		client.LineBreak,
 	)
 
 	return txCmd
+}
+
+func initConfig(cmd *cobra.Command) error {
+	home, err := cmd.PersistentFlags().GetString(cli.HomeFlag)
+	if err != nil {
+		return err
+	}
+
+	cfgFile := path.Join(home, "config", "config.toml")
+	if _, err := os.Stat(cfgFile); err == nil {
+		viper.SetConfigFile(cfgFile)
+
+		if err := viper.ReadInConfig(); err != nil {
+			return err
+		}
+	}
+	if err := viper.BindPFlag(client.FlagChainID, cmd.PersistentFlags().Lookup(client.FlagChainID)); err != nil {
+		return err
+	}
+	if err := viper.BindPFlag(cli.EncodingFlag, cmd.PersistentFlags().Lookup(cli.EncodingFlag)); err != nil {
+		return err
+	}
+	return viper.BindPFlag(cli.OutputFlag, cmd.PersistentFlags().Lookup(cli.OutputFlag))
 }
 
 func registerRoutes(rs *lcd.RestServer) {

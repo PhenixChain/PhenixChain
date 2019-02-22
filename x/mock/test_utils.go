@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/PhenixChain/PhenixChain/codec"
+
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -51,10 +53,10 @@ func CheckBalance(t *testing.T, app *App, addr sdk.AccAddress, exp sdk.Coins) {
 // compared against the parameter 'expPass'. A test assertion is made using the
 // parameter 'expPass' against the result. A corresponding result is returned.
 func CheckGenTx(
-	t *testing.T, app *baseapp.BaseApp, msgs []sdk.Msg, accNums []uint64,
+	t *testing.T, app *baseapp.BaseApp, msgs []sdk.Msg,
 	seq []uint64, expPass bool, priv ...crypto.PrivKey,
 ) sdk.Result {
-	tx := GenTx(msgs, accNums, seq, priv...)
+	tx := GenTx(msgs, seq, priv...)
 	res := app.Check(tx)
 
 	if expPass {
@@ -70,13 +72,17 @@ func CheckGenTx(
 // block commitment with the given transaction. A test assertion is made using
 // the parameter 'expPass' against the result. A corresponding result is
 // returned.
-func SignCheckDeliver(
-	t *testing.T, app *baseapp.BaseApp, msgs []sdk.Msg, accNums []uint64,
-	seq []uint64, expSimPass, expPass bool, priv ...crypto.PrivKey,
-) sdk.Result {
-	tx := GenTx(msgs, accNums, seq, priv...)
+func SignCheckDeliver(t *testing.T, cdc *codec.Codec, app *baseapp.BaseApp,
+	msgs []sdk.Msg, seq []uint64, expSimPass, expPass bool,
+	priv ...crypto.PrivKey) sdk.Result {
+
+	tx := GenTx(msgs, seq, priv...)
+
+	txBytes, err := cdc.MarshalBinaryLengthPrefixed(tx)
+	require.Nil(t, err)
+
 	// Must simulate now as CheckTx doesn't run Msgs anymore
-	res := app.Simulate(tx)
+	res := app.Simulate(txBytes, tx)
 
 	if expSimPass {
 		require.Equal(t, sdk.CodeOK, res.Code, res.Log)

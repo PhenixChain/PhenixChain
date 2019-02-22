@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -15,10 +14,12 @@ import (
 	"github.com/PhenixChain/PhenixChain/client/utils"
 	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/PhenixChain/PhenixChain/x/auth"
+	authclient "github.com/PhenixChain/PhenixChain/x/auth/client"
 	authtxb "github.com/PhenixChain/PhenixChain/x/auth/client/txbuilder"
 )
 
 const (
+	flagMultisig     = "multisig"
 	flagAppend       = "append"
 	flagValidateSigs = "validate-signatures"
 	flagOffline      = "offline"
@@ -29,30 +30,42 @@ const (
 // GetSignCommand returns the sign command
 func GetSignCommand(codec *amino.Codec) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sign <file>",
+		Use:   "sign [file]",
 		Short: "Sign transactions generated offline",
 		Long: `Sign transactions created with the --generate-only flag.
-Read a transaction from <file>, sign it, and print its JSON encoding.
+Read a transaction from [file], sign it, and print its JSON encoding.
+
 If the flag --signature-only flag is on, it outputs a JSON representation
 of the generated signature only.
+
 If the flag --validate-signatures is on, then the command would check whether all required
 signers have signed the transactions, whether the signatures were collected in the right
 order, and if the signature is valid over the given transaction. If the --offline
 flag is also provided, signature validation over the transaction will be not be
 performed as that will require communication with a full node.
+
 The --offline flag makes sure that the client will not reach out to an external node.
 Thus account number or sequence number lookups will not be performed and it is
-recommended to set such parameters manually.`,
+recommended to set such parameters manually.
+
+The --multisig=<multisig_key> flag generates a signature on behalf of a multisig account
+key. It implies --signature-only. Full multisig signed transactions may eventually
+be generated via the 'multisign' command.
+`,
 		RunE: makeSignCmd(codec),
 		Args: cobra.ExactArgs(1),
 	}
 	cmd.Flags().String(client.FlagName, "", "Name of private key with which to sign")
+	cmd.Flags().String(flagMultisig, "",
+		"Address of the multisig account on behalf of which the "+
+			"transaction shall be signed")
 	cmd.Flags().Bool(flagAppend, true,
-		"Append the signature to the existing ones. If disabled, old signatures would be overwritten")
-	cmd.Flags().Bool(flagSigOnly, false, "Print only the generated signature, then exit.")
+		"Append the signature to the existing ones. "+
+			"If disabled, old signatures would be overwritten. Ignored if --multisig is on")
+	cmd.Flags().Bool(flagSigOnly, false, "Print only the generated signature, then exit")
 	cmd.Flags().Bool(flagValidateSigs, false, "Print the addresses that must sign the transaction, "+
-		"those who have already signed it, and make sure that signatures are in the correct order.")
-	cmd.Flags().Bool(flagOffline, false, "Offline mode. Do not query a full node.")
+		"those who have already signed it, and make sure that signatures are in the correct order")
+	cmd.Flags().Bool(flagOffline, false, "Offline mode. Do not query a full node")
 	cmd.Flags().String(flagOutfile, "",
 		"The document will be written to the given file instead of STDOUT")
 
@@ -62,7 +75,7 @@ recommended to set such parameters manually.`,
 
 func makeSignCmd(cdc *amino.Codec) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) (err error) {
-		stdTx, err := readAndUnmarshalStdTx(cdc, args[0])
+		stdTx, err := authclient.ReadStdTxFromFile(cdc, args[0])
 		if err != nil {
 			return
 		}
@@ -72,7 +85,7 @@ func makeSignCmd(cdc *amino.Codec) func(cmd *cobra.Command, args []string) error
 		txBldr := authtxb.NewTxBuilderFromCLI()
 
 		if viper.GetBool(flagValidateSigs) {
-			if !printAndValidateSigs(cliCtx, txBldr.ChainID, stdTx, offline) {
+			if !printAndValidateSigs(cliCtx, txBldr.ChainID(), stdTx, offline) {
 				return fmt.Errorf("signatures validation failed")
 			}
 
@@ -85,9 +98,25 @@ func makeSignCmd(cdc *amino.Codec) func(cmd *cobra.Command, args []string) error
 		}
 
 		// if --signature-only is on, then override --append
+		var newTx auth.StdTx
 		generateSignatureOnly := viper.GetBool(flagSigOnly)
-		appendSig := viper.GetBool(flagAppend) && !generateSignatureOnly
-		newTx, err := utils.SignStdTx(txBldr, cliCtx, name, stdTx, appendSig, offline)
+		multisigAddrStr := viper.GetString(flagMultisig)
+
+		if multisigAddrStr != "" {
+			var multisigAddr sdk.AccAddress
+			multisigAddr, err = sdk.AccAddressFromBech32(multisigAddrStr)
+			if err != nil {
+				return err
+			}
+
+			newTx, err = utils.SignStdTxWithSignerAddress(
+				txBldr, cliCtx, multisigAddr, name, stdTx, offline)
+			generateSignatureOnly = true
+		} else {
+			appendSig := viper.GetBool(flagAppend) && !generateSignatureOnly
+			newTx, err = utils.SignStdTx(
+				txBldr, cliCtx, name, stdTx, appendSig, offline)
+		}
 		if err != nil {
 			return err
 		}
@@ -192,15 +221,4 @@ func printAndValidateSigs(
 
 	fmt.Println("")
 	return success
-}
-
-func readAndUnmarshalStdTx(cdc *amino.Codec, filename string) (stdTx auth.StdTx, err error) {
-	var bytes []byte
-	if bytes, err = ioutil.ReadFile(filename); err != nil {
-		return
-	}
-	if err = cdc.UnmarshalJSON(bytes, &stdTx); err != nil {
-		return
-	}
-	return
 }
