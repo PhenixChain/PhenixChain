@@ -46,7 +46,7 @@ var PowerReduction = NewIntFromBigInt(new(big.Int).Exp(big.NewInt(10), big.NewIn
 
 // TokensToTendermintPower - convert input tokens to potential tendermint power
 func TokensToTendermintPower(tokens Int) int64 {
-	return (tokens.Div(PowerReduction)).Int64()
+	return (tokens.Quo(PowerReduction)).Int64()
 }
 
 // TokensFromTendermintPower - convert input power to tokens
@@ -61,19 +61,23 @@ func (b BondStatus) Equal(b2 BondStatus) bool {
 
 // validator for a delegated proof of stake system
 type Validator interface {
-	GetJailed() bool              // whether the validator is jailed
-	GetMoniker() string           // moniker of the validator
-	GetStatus() BondStatus        // status of the validator
-	GetOperator() ValAddress      // operator address to receive/return validators coins
-	GetConsPubKey() crypto.PubKey // validation consensus pubkey
-	GetConsAddr() ConsAddress     // validation consensus address
-	GetTokens() Int               // validation tokens
-	GetBondedTokens() Int         // validator bonded tokens
-	GetTendermintPower() int64    // validation power in tendermint
-	GetCommission() Dec           // validator commission rate
-	GetMinSelfDelegation() Int    // validator minimum self delegation
-	GetDelegatorShares() Dec      // total outstanding delegator shares
-	GetDelegatorShareExRate() Dec // tokens per delegator share exchange rate
+	IsJailed() bool                                 // whether the validator is jailed
+	GetMoniker() string                             // moniker of the validator
+	GetStatus() BondStatus                          // status of the validator
+	GetOperator() ValAddress                        // operator address to receive/return validators coins
+	GetConsPubKey() crypto.PubKey                   // validation consensus pubkey
+	GetConsAddr() ConsAddress                       // validation consensus address
+	GetTokens() Int                                 // validation tokens
+	GetBondedTokens() Int                           // validator bonded tokens
+	GetTendermintPower() int64                      // validation power in tendermint
+	GetCommission() Dec                             // validator commission rate
+	GetMinSelfDelegation() Int                      // validator minimum self delegation
+	GetDelegatorShares() Dec                        // total outstanding delegator shares
+	TokensFromShares(Dec) Dec                       // token worth of provided delegator shares
+	TokensFromSharesTruncated(Dec) Dec              // token worth of provided delegator shares, truncated
+	TokensFromSharesRoundUp(Dec) Dec                // token worth of provided delegator shares, rounded up
+	SharesFromTokens(amt Int) (Dec, Error)          // shares worth of delegator's bond
+	SharesFromTokensTruncated(amt Int) (Dec, Error) // truncated shares worth of delegator's bond
 }
 
 // validator which fulfills abci validator interface for use in Tendermint

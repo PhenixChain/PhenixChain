@@ -52,7 +52,13 @@ func NewBaseKeeper(ak auth.AccountKeeper, tk TxKeeper,
 }
 
 // SetCoins sets the coins at the addr.
-func (keeper BaseKeeper) SetCoins(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins) sdk.Error {
+func (keeper BaseKeeper) SetCoins(
+	ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins,
+) sdk.Error {
+
+	if !amt.IsValid() {
+		return sdk.ErrInvalidCoins(amt.String())
+	}
 	return setCoins(ctx, keeper.ak, addr, amt)
 }
 
@@ -61,6 +67,9 @@ func (keeper BaseKeeper) SubtractCoins(
 	ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins,
 ) (sdk.Coins, sdk.Tags, sdk.Error) {
 
+	if !amt.IsValid() {
+		return nil, nil, sdk.ErrInvalidCoins(amt.String())
+	}
 	return subtractCoins(ctx, keeper.ak, keeper.tk, addr, amt)
 }
 
@@ -69,6 +78,9 @@ func (keeper BaseKeeper) AddCoins(
 	ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins,
 ) (sdk.Coins, sdk.Tags, sdk.Error) {
 
+	if !amt.IsValid() {
+		return nil, nil, sdk.ErrInvalidCoins(amt.String())
+	}
 	return addCoins(ctx, keeper.ak, keeper.tk, addr, amt)
 }
 
@@ -83,14 +95,27 @@ func (keeper BaseKeeper) InputOutputCoins(
 // DelegateCoins performs delegation by deducting amt coins from an account with
 // address addr. For vesting accounts, delegations amounts are tracked for both
 // vesting and vested coins.
-func (keeper BaseKeeper) DelegateCoins(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins) (sdk.Tags, sdk.Error) {
+func (keeper BaseKeeper) DelegateCoins(
+	ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins,
+) (sdk.Tags, sdk.Error) {
+
+	if !amt.IsValid() {
+		return nil, sdk.ErrInvalidCoins(amt.String())
+	}
 	return delegateCoins(ctx, keeper.ak, addr, amt)
 }
 
 // UndelegateCoins performs undelegation by crediting amt coins to an account with
 // address addr. For vesting accounts, undelegation amounts are tracked for both
 // vesting and vested coins.
-func (keeper BaseKeeper) UndelegateCoins(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins) (sdk.Tags, sdk.Error) {
+// If any of the undelegation amounts are negative, an error is returned.
+func (keeper BaseKeeper) UndelegateCoins(
+	ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coins,
+) (sdk.Tags, sdk.Error) {
+
+	if !amt.IsValid() {
+		return nil, sdk.ErrInvalidCoins(amt.String())
+	}
 	return undelegateCoins(ctx, keeper.ak, addr, amt)
 }
 
@@ -133,6 +158,10 @@ func NewBaseSendKeeper(ak auth.AccountKeeper, tk TxKeeper,
 func (keeper BaseSendKeeper) SendCoins(
 	ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins,
 ) (sdk.Tags, sdk.Error) {
+
+	if !amt.IsValid() {
+		return nil, sdk.ErrInvalidCoins(amt.String())
+	}
 	return sendCoins(ctx, keeper, fromAddr, toAddr, amt)
 }
 
@@ -189,12 +218,15 @@ func (keeper BaseViewKeeper) Codespace() sdk.CodespaceType {
 func getCoins(ctx sdk.Context, am auth.AccountKeeper, addr sdk.AccAddress) sdk.Coins {
 	acc := am.GetAccount(ctx, addr)
 	if acc == nil {
-		return sdk.Coins{}
+		return sdk.NewCoins()
 	}
 	return acc.GetCoins()
 }
 
 func setCoins(ctx sdk.Context, am auth.AccountKeeper, addr sdk.AccAddress, amt sdk.Coins) sdk.Error {
+	if !amt.IsValid() {
+		return sdk.ErrInvalidCoins(amt.String())
+	}
 	acc := am.GetAccount(ctx, addr)
 	if acc == nil {
 		acc = am.NewAccountWithAddress(ctx, addr)
@@ -225,7 +257,12 @@ func setAccount(ctx sdk.Context, ak auth.AccountKeeper, acc auth.Account) {
 //
 // CONTRACT: If the account is a vesting account, the amount has to be spendable.
 func subtractCoins(ctx sdk.Context, ak auth.AccountKeeper, tk TxKeeper, addr sdk.AccAddress, amt sdk.Coins) (sdk.Coins, sdk.Tags, sdk.Error) {
-	oldCoins, spendableCoins := sdk.Coins{}, sdk.Coins{}
+
+	if !amt.IsValid() {
+		return nil, nil, sdk.ErrInvalidCoins(amt.String())
+	}
+
+	oldCoins, spendableCoins := sdk.NewCoins(), sdk.NewCoins()
 
 	acc := getAccount(ctx, ak, addr)
 	if acc != nil {
@@ -235,14 +272,14 @@ func subtractCoins(ctx sdk.Context, ak auth.AccountKeeper, tk TxKeeper, addr sdk
 
 	// For non-vesting accounts, spendable coins will simply be the original coins.
 	// So the check here is sufficient instead of subtracting from oldCoins.
-	_, hasNeg := spendableCoins.SafeMinus(amt)
+	_, hasNeg := spendableCoins.SafeSub(amt)
 	if hasNeg {
 		return amt, nil, sdk.ErrInsufficientCoins(
-			fmt.Sprintf("insufficient account funds; %s < %s", spendableCoins, amt),
+			fmt.Sprintf("insufficient account funds"),
 		)
 	}
 
-	newCoins := oldCoins.Minus(amt) // should not panic as spendable coins was already checked
+	newCoins := oldCoins.Sub(amt) // should not panic as spendable coins was already checked
 	err := setCoins(ctx, ak, addr, newCoins)
 	// nikolas
 	storeAddressTxHash(ctx, tk, addr)
@@ -253,12 +290,17 @@ func subtractCoins(ctx sdk.Context, ak auth.AccountKeeper, tk TxKeeper, addr sdk
 
 // AddCoins adds amt to the coins at the addr.
 func addCoins(ctx sdk.Context, am auth.AccountKeeper, tk TxKeeper, addr sdk.AccAddress, amt sdk.Coins) (sdk.Coins, sdk.Tags, sdk.Error) {
+
+	if !amt.IsValid() {
+		return nil, nil, sdk.ErrInvalidCoins(amt.String())
+	}
+
 	oldCoins := getCoins(ctx, am, addr)
-	newCoins := oldCoins.Plus(amt)
+	newCoins := oldCoins.Add(amt)
 
 	if newCoins.IsAnyNegative() {
 		return amt, nil, sdk.ErrInsufficientCoins(
-			fmt.Sprintf("insufficient account funds; %s < %s", oldCoins, amt),
+			fmt.Sprintf("insufficient account funds"),
 		)
 	}
 
@@ -271,9 +313,9 @@ func addCoins(ctx sdk.Context, am auth.AccountKeeper, tk TxKeeper, addr sdk.AccA
 }
 
 // SendCoins moves coins from one account to another
+// Returns ErrInvalidCoins if amt is invalid.
 func sendCoins(ctx sdk.Context, bsk BaseSendKeeper, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) (sdk.Tags, sdk.Error) {
 	// Safety check ensuring that when sending coins the keeper must maintain the
-	// supply invariant.
 	if !amt.IsValid() {
 		return nil, sdk.ErrInvalidCoins(amt.String())
 	}
@@ -295,7 +337,7 @@ func sendCoins(ctx sdk.Context, bsk BaseSendKeeper, fromAddr sdk.AccAddress, toA
 // NOTE: Make sure to revert state changes from tx on error
 func inputOutputCoins(ctx sdk.Context, bk BaseKeeper, inputs []Input, outputs []Output) (sdk.Tags, sdk.Error) {
 	// Safety check ensuring that when sending coins the keeper must maintain the
-	// supply invariant.
+	// Check supply invariant and validity of Coins.
 	if err := ValidateInputsOutputs(inputs, outputs); err != nil {
 		return nil, err
 	}
@@ -325,6 +367,10 @@ func delegateCoins(
 	ctx sdk.Context, ak auth.AccountKeeper, addr sdk.AccAddress, amt sdk.Coins,
 ) (sdk.Tags, sdk.Error) {
 
+	if !amt.IsValid() {
+		return nil, sdk.ErrInvalidCoins(amt.String())
+	}
+
 	acc := getAccount(ctx, ak, addr)
 	if acc == nil {
 		return nil, sdk.ErrUnknownAddress(fmt.Sprintf("account %s does not exist", addr))
@@ -332,10 +378,10 @@ func delegateCoins(
 
 	oldCoins := acc.GetCoins()
 
-	_, hasNeg := oldCoins.SafeMinus(amt)
+	_, hasNeg := oldCoins.SafeSub(amt)
 	if hasNeg {
 		return nil, sdk.ErrInsufficientCoins(
-			fmt.Sprintf("insufficient account funds; %s < %s", oldCoins, amt),
+			fmt.Sprintf("insufficient account funds"),
 		)
 	}
 
@@ -355,6 +401,10 @@ func undelegateCoins(
 	ctx sdk.Context, ak auth.AccountKeeper, addr sdk.AccAddress, amt sdk.Coins,
 ) (sdk.Tags, sdk.Error) {
 
+	if !amt.IsValid() {
+		return nil, sdk.ErrInvalidCoins(amt.String())
+	}
+
 	acc := getAccount(ctx, ak, addr)
 	if acc == nil {
 		return nil, sdk.ErrUnknownAddress(fmt.Sprintf("account %s does not exist", addr))
@@ -372,24 +422,26 @@ func undelegateCoins(
 	), nil
 }
 
-func trackDelegation(acc auth.Account, blockTime time.Time, amount sdk.Coins) error {
+// CONTRACT: assumes that amt is valid.
+func trackDelegation(acc auth.Account, blockTime time.Time, amt sdk.Coins) error {
 	vacc, ok := acc.(auth.VestingAccount)
 	if ok {
-		vacc.TrackDelegation(blockTime, amount)
+		vacc.TrackDelegation(blockTime, amt)
 		return nil
 	}
 
-	return acc.SetCoins(acc.GetCoins().Minus(amount))
+	return acc.SetCoins(acc.GetCoins().Sub(amt))
 }
 
-func trackUndelegation(acc auth.Account, amount sdk.Coins) error {
+// CONTRACT: assumes that amt is valid.
+func trackUndelegation(acc auth.Account, amt sdk.Coins) error {
 	vacc, ok := acc.(auth.VestingAccount)
 	if ok {
-		vacc.TrackUndelegation(amount)
+		vacc.TrackUndelegation(amt)
 		return nil
 	}
 
-	return acc.SetCoins(acc.GetCoins().Plus(amount))
+	return acc.SetCoins(acc.GetCoins().Add(amt))
 }
 
 //#############################################################################################
@@ -402,7 +454,7 @@ func trackUndelegation(acc auth.Account, amount sdk.Coins) error {
 
 func storeAddressTxHash(ctx sdk.Context, tk TxKeeper, addr sdk.AccAddress) {
 	key := append([]byte{0x01}, addr.Bytes()...)
-	store := ctx.KVStore(tk.key)
+	store := ctx.KVStoreNoGas(tk.key)
 
 	// 取出历史数据
 	getTxs := []Tx{}

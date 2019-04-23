@@ -105,7 +105,7 @@ func txCmd(cdc *amino.Codec) *cobra.Command {
 		bankcmd.SendTxCmd(cdc),
 		client.LineBreak,
 		authcmd.GetSignCommand(cdc),
-		authcmd.GetBroadcastCommand(cdc),
+		tx.GetBroadcastCommand(cdc),
 		client.LineBreak,
 	)
 
@@ -137,7 +137,6 @@ func initConfig(cmd *cobra.Command) error {
 
 func registerRoutes(rs *lcd.RestServer) {
 	rs.CliCtx = rs.CliCtx.WithAccountDecoder(rs.Cdc)
-	keys.RegisterRoutes(rs.Mux, rs.CliCtx.Indent)
 	rpc.RegisterRoutes(rs.CliCtx, rs.Mux)
 	tx.RegisterRoutes(rs.CliCtx, rs.Mux, rs.Cdc)
 	auth.RegisterRoutes(rs.CliCtx, rs.Mux, rs.Cdc, storeAcc)

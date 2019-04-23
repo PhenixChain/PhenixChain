@@ -1,6 +1,8 @@
 package types
 
-import "math"
+import (
+	"math"
+)
 
 // Gas consumption descriptors.
 const (
@@ -157,13 +159,13 @@ type GasConfig struct {
 // KVGasConfig returns a default gas config for KVStores.
 func KVGasConfig() GasConfig {
 	return GasConfig{
-		HasCost:          1000,
-		DeleteCost:       1000,
-		ReadCostFlat:     1000,
-		ReadCostPerByte:  3,
-		WriteCostFlat:    2000,
-		WriteCostPerByte: 30,
-		IterNextCostFlat: 30,
+		HasCost:          10,
+		DeleteCost:       10,
+		ReadCostFlat:     10,
+		ReadCostPerByte:  1,
+		WriteCostFlat:    10,
+		WriteCostPerByte: 1,
+		IterNextCostFlat: 1,
 	}
 }
 

@@ -8,7 +8,10 @@ import (
 	"github.com/PhenixChain/PhenixChain/store/gaskv"
 	"github.com/PhenixChain/PhenixChain/store/iavl"
 	"github.com/PhenixChain/PhenixChain/store/types"
+	sdk "github.com/PhenixChain/PhenixChain/types"
+
 	"github.com/stretchr/testify/require"
+
 	tiavl "github.com/tendermint/iavl"
 	dbm "github.com/tendermint/tendermint/libs/db"
 )
@@ -243,7 +246,7 @@ func mockStoreWithStuff() types.KVStore {
 	store.Set(bz("key3"), bz("value3"))
 	store.Set(bz("something"), bz("else"))
 	store.Set(bz(""), bz(""))
-	store.Set(bz("k"), bz("val"))
+	store.Set(bz("k"), bz(sdk.PrefixValidator))
 	store.Set(bz("ke"), bz("valu"))
 	store.Set(bz("kee"), bz("valuu"))
 	return store

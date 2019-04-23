@@ -1,12 +1,9 @@
 package types
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	cmn "github.com/tendermint/tendermint/libs/common"
 
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -229,10 +226,10 @@ func (err *sdkError) TraceSDK(format string, args ...interface{}) Error {
 // Implements ABCIError.
 func (err *sdkError) Error() string {
 	return fmt.Sprintf(`ERROR:
-Codespace: %s
-Code: %d
-Message: %#v
-`, err.codespace, err.code, err.cmnError.Error())
+	Codespace: %s
+	Code: %d
+	Message: %#v
+	`, err.codespace, err.code, err.cmnError.Error())
 }
 
 // Implements Error.
@@ -248,21 +245,7 @@ func (err *sdkError) Code() CodeType {
 // Implements ABCIError.
 func (err *sdkError) ABCILog() string {
 	errMsg := err.cmnError.Error()
-	jsonErr := humanReadableError{
-		Codespace: err.codespace,
-		Code:      err.code,
-		Message:   errMsg,
-	}
-
-	var buff bytes.Buffer
-	enc := json.NewEncoder(&buff)
-	enc.SetEscapeHTML(false)
-
-	if err := enc.Encode(jsonErr); err != nil {
-		panic(errors.Wrap(err, "failed to encode ABCI error log"))
-	}
-
-	return strings.TrimSpace(buff.String())
+	return errMsg
 }
 
 func (err *sdkError) Result() Result {

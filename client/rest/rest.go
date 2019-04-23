@@ -1,13 +1,13 @@
 package rest
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/PhenixChain/PhenixChain/client/context"
 	"github.com/PhenixChain/PhenixChain/client/utils"
 	"github.com/PhenixChain/PhenixChain/codec"
-	"github.com/PhenixChain/PhenixChain/crypto/keys/keyerror"
 	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/PhenixChain/PhenixChain/types/rest"
 	"github.com/PhenixChain/PhenixChain/x/auth"
@@ -16,84 +16,6 @@ import (
 
 //-----------------------------------------------------------------------------
 // Building / Sending utilities
-
-// CompleteAndBroadcastTxREST implements a utility function that facilitates
-// sending a series of messages in a signed tx. In addition, it will handle
-// tx gas simulation and estimation.
-//
-// NOTE: Also see CompleteAndBroadcastTxCLI.
-func CompleteAndBroadcastTxREST(w http.ResponseWriter, cliCtx context.CLIContext,
-	baseReq rest.BaseReq, msgs []sdk.Msg, cdc *codec.Codec) {
-
-	gasAdj, ok := rest.ParseFloat64OrReturnBadRequest(w, baseReq.GasAdjustment, client.DefaultGasAdjustment)
-	if !ok {
-		return
-	}
-
-	simAndExec, gas, err := client.ParseGas(baseReq.Gas)
-	if err != nil {
-		rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// derive the from account address and name from the Keybase
-	fromAddress, fromName, err := context.GetFromFields(baseReq.From)
-	if err != nil {
-		rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	cliCtx = cliCtx.WithFromName(fromName).WithFromAddress(fromAddress)
-	txBldr := authtxb.NewTxBuilder(
-		utils.GetTxEncoder(cdc),
-		baseReq.Sequence, gas, gasAdj, baseReq.Simulate,
-		baseReq.ChainID, baseReq.Memo, baseReq.Fees, baseReq.GasPrices,
-	)
-
-	txBldr, err = utils.PrepareTxBuilder(txBldr, cliCtx)
-	if err != nil {
-		rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if baseReq.Simulate || simAndExec {
-		if gasAdj < 0 {
-			rest.WriteErrorResponse(w, http.StatusBadRequest, client.ErrInvalidGasAdjustment.Error())
-			return
-		}
-
-		txBldr, err = utils.EnrichWithGas(txBldr, cliCtx, msgs)
-		if err != nil {
-			rest.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		if baseReq.Simulate {
-			rest.WriteSimulationResponse(w, cdc, txBldr.Gas())
-			return
-		}
-	}
-
-	txBytes, err := txBldr.BuildAndSign(cliCtx.GetFromName(), baseReq.Password, msgs)
-	if keyerror.IsErrKeyNotFound(err) {
-		rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
-		return
-	} else if keyerror.IsErrWrongPassword(err) {
-		rest.WriteErrorResponse(w, http.StatusUnauthorized, err.Error())
-		return
-	} else if err != nil {
-		rest.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	res, err := cliCtx.BroadcastTx(txBytes)
-	if err != nil {
-		rest.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	rest.PostProcessResponse(w, cdc, res, cliCtx.Indent)
-}
 
 // WriteGenerateStdTxResponse writes response for the generate only mode.
 func WriteGenerateStdTxResponse(w http.ResponseWriter, cdc *codec.Codec,
@@ -115,7 +37,7 @@ func WriteGenerateStdTxResponse(w http.ResponseWriter, cdc *codec.Codec,
 		br.Simulate, br.ChainID, br.Memo, br.Fees, br.GasPrices,
 	)
 
-	if simAndExec {
+	if br.Simulate || simAndExec {
 		if gasAdj < 0 {
 			rest.WriteErrorResponse(w, http.StatusBadRequest, client.ErrInvalidGasAdjustment.Error())
 			return
@@ -124,6 +46,11 @@ func WriteGenerateStdTxResponse(w http.ResponseWriter, cdc *codec.Codec,
 		txBldr, err = utils.EnrichWithGas(txBldr, cliCtx, msgs)
 		if err != nil {
 			rest.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		if br.Simulate {
+			rest.WriteSimulationResponse(w, cdc, txBldr.Gas())
 			return
 		}
 	}
@@ -141,6 +68,8 @@ func WriteGenerateStdTxResponse(w http.ResponseWriter, cdc *codec.Codec,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(output)
+	if _, err := w.Write(output); err != nil {
+		log.Printf("could not write response: %v", err)
+	}
 	return
 }

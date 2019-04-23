@@ -51,7 +51,7 @@ func TestHandleDoubleSign(t *testing.T) {
 	keeper.handleDoubleSign(ctx, val.Address(), 0, time.Unix(0, 0), power)
 
 	// should be jailed
-	require.True(t, sk.Validator(ctx, operatorAddr).GetJailed())
+	require.True(t, sk.Validator(ctx, operatorAddr).IsJailed())
 
 	// tokens should be decreased
 	newTokens := sk.Validator(ctx, operatorAddr).GetTokens()
@@ -73,7 +73,10 @@ func TestHandleDoubleSign(t *testing.T) {
 
 	// Should be able to unbond now
 	del, _ := sk.GetDelegation(ctx, sdk.AccAddress(operatorAddr), operatorAddr)
-	msgUnbond := staking.NewMsgUndelegate(sdk.AccAddress(operatorAddr), operatorAddr, del.GetShares())
+	validator, _ := sk.GetValidator(ctx, operatorAddr)
+
+	totalBond := validator.TokensFromShares(del.GetShares()).TruncateInt()
+	msgUnbond := staking.NewMsgUndelegate(sdk.AccAddress(operatorAddr), operatorAddr, sdk.NewCoin(sk.GetParams(ctx).BondDenom, totalBond))
 	res = staking.NewHandler(sk)(ctx, msgUnbond)
 	require.True(t, res.IsOK())
 }
@@ -189,7 +192,7 @@ func TestHandleAbsentValidator(t *testing.T) {
 	validator, _ = sk.GetValidatorByConsAddr(ctx, sdk.GetConsAddress(val))
 	require.Equal(t, sdk.Unbonding, validator.GetStatus())
 
-	slashAmt := sdk.NewDecFromInt(amt).Mul(keeper.SlashFractionDowntime(ctx)).RoundInt64()
+	slashAmt := amt.ToDec().Mul(keeper.SlashFractionDowntime(ctx)).RoundInt64()
 
 	// validator should have been slashed
 	require.Equal(t, amt.Int64()-slashAmt, validator.GetTokens().Int64())

@@ -287,12 +287,25 @@ func (app *BaseApp) storeConsensusParams(consensusParams *abci.ConsensusParams) 
 	mainStore.Set(mainConsensusParamsKey, consensusParamsBz)
 }
 
-// getMaximumBlockGas gets the maximum gas from the consensus params.
-func (app *BaseApp) getMaximumBlockGas() (maxGas uint64) {
-	if app.consensusParams == nil || app.consensusParams.BlockSize == nil {
+// getMaximumBlockGas gets the maximum gas from the consensus params. It panics
+// if maximum block gas is less than negative one and returns zero if negative
+// one.
+func (app *BaseApp) getMaximumBlockGas() uint64 {
+	if app.consensusParams == nil || app.consensusParams.Block == nil {
 		return 0
 	}
-	return uint64(app.consensusParams.BlockSize.MaxGas)
+
+	maxGas := app.consensusParams.Block.MaxGas
+	switch {
+	case maxGas < -1:
+		panic(fmt.Sprintf("invalid maximum block gas: %d", maxGas))
+
+	case maxGas == -1:
+		return 0
+
+	default:
+		return uint64(maxGas)
+	}
 }
 
 // ----------------------------------------------------------------------------
@@ -318,16 +331,17 @@ func (app *BaseApp) SetOption(req abci.RequestSetOption) (res abci.ResponseSetOp
 // InitChain implements the ABCI interface. It runs the initialization logic
 // directly on the CommitMultiStore.
 func (app *BaseApp) InitChain(req abci.RequestInitChain) (res abci.ResponseInitChain) {
-
 	// stash the consensus params in the cms main store and memoize
 	if req.ConsensusParams != nil {
 		app.setConsensusParams(req.ConsensusParams)
 		app.storeConsensusParams(req.ConsensusParams)
 	}
 
-	// initialize the deliver state and check state with ChainID and run initChain
-	app.setDeliverState(abci.Header{ChainID: req.ChainId})
-	app.setCheckState(abci.Header{ChainID: req.ChainId})
+	initHeader := abci.Header{ChainID: req.ChainId, Time: req.Time}
+
+	// initialize the deliver state and check state with a correct header
+	app.setDeliverState(initHeader)
+	app.setCheckState(initHeader)
 
 	if app.initChainer == nil {
 		return
@@ -509,12 +523,29 @@ func handleQueryCustom(app *BaseApp, path []string, req abci.RequestQuery) (res 
 	}
 }
 
+func (app *BaseApp) validateHeight(req abci.RequestBeginBlock) error {
+	if req.Header.Height < 1 {
+		return fmt.Errorf("invalid height: %d", req.Header.Height)
+	}
+
+	prevHeight := app.LastBlockHeight()
+	if req.Header.Height != prevHeight+1 {
+		return fmt.Errorf("invalid height: %d; expected: %d", req.Header.Height, prevHeight+1)
+	}
+
+	return nil
+}
+
 // BeginBlock implements the ABCI application interface.
 func (app *BaseApp) BeginBlock(req abci.RequestBeginBlock) (res abci.ResponseBeginBlock) {
 	if app.cms.TracingEnabled() {
 		app.cms.SetTracingContext(sdk.TraceContext(
 			map[string]interface{}{"blockHeight": req.Header.Height},
 		))
+	}
+
+	if err := app.validateHeight(req); err != nil {
+		panic(err)
 	}
 
 	// Initialize the DeliverTx state. If this is the first block, it should
@@ -628,12 +659,6 @@ func (app *BaseApp) getContextForTx(mode runTxMode, txBytes []byte) (ctx sdk.Con
 	return
 }
 
-type indexedABCILog struct {
-	MsgIndex int    `json:"msg_index"`
-	Success  bool   `json:"success"`
-	Log      string `json:"log"`
-}
-
 // runMsgs iterates through all the messages and executes them.
 func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, mode runTxMode) (result sdk.Result) {
 	logs := make([]string, 0, len(msgs))
@@ -667,7 +692,7 @@ func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, mode runTxMode) (re
 
 		// stop execution and return on first failed message
 		if !msgResult.IsOK() {
-			logs = append(logs, fmt.Sprintf("failed detail: %s", msgResult.Log))
+			logs = append(logs, fmt.Sprintf("%s", msgResult.Log))
 
 			code = msgResult.Code
 			codespace = msgResult.Codespace
@@ -675,7 +700,7 @@ func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, mode runTxMode) (re
 		}
 	}
 
-	logRs := "success"
+	logRs := ""
 	if len(logs) > 0 {
 		logRs = strings.Join(logs, "\n")
 	}
@@ -692,7 +717,7 @@ func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, mode runTxMode) (re
 	return result
 }
 
-// Returns the applicantion's deliverState if app is in runTxModeDeliver,
+// Returns the applications's deliverState if app is in runTxModeDeliver,
 // otherwise it returns the application's checkstate.
 func (app *BaseApp) getState(mode runTxMode) *state {
 	if mode == runTxModeCheck || mode == runTxModeSimulate {
@@ -802,7 +827,7 @@ func (app *BaseApp) runTx(mode runTxMode, txBytes []byte, tx sdk.Tx) (result sdk
 		// performance benefits, but it'll be more difficult to get right.
 		anteCtx, msCache = app.cacheTxContext(ctx, txBytes)
 
-		newCtx, result, abort := app.anteHandler(anteCtx, tx, (mode == runTxModeSimulate))
+		newCtx, result, abort := app.anteHandler(anteCtx, tx, mode == runTxModeSimulate)
 		if !newCtx.IsZero() {
 			// At this point, newCtx.MultiStore() is cache-wrapped, or something else
 			// replaced by the ante handler. We want the original multistore, not one

@@ -49,7 +49,7 @@ func tally(ctx sdk.Context, keeper Keeper, proposal Proposal) (passes bool, tall
 	})
 
 	// iterate over all the votes
-	votesIterator := keeper.GetVotes(ctx, proposal.GetProposalID())
+	votesIterator := keeper.GetVotes(ctx, proposal.ProposalID)
 	defer votesIterator.Close()
 	for ; votesIterator.Valid(); votesIterator.Next() {
 		vote := &Vote{}
@@ -107,7 +107,7 @@ func tally(ctx sdk.Context, keeper Keeper, proposal Proposal) (passes bool, tall
 		return false, tallyResults
 	}
 	// If there is not enough quorum of votes, the proposal fails
-	percentVoting := totalVotingPower.Quo(sdk.NewDecFromInt(keeper.vs.TotalBondedTokens(ctx)))
+	percentVoting := totalVotingPower.Quo(keeper.vs.TotalBondedTokens(ctx).ToDec())
 	if percentVoting.LT(tallyParams.Quorum) {
 		return false, tallyResults
 	}

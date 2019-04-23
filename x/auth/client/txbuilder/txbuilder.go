@@ -1,6 +1,7 @@
 package context
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,8 +11,6 @@ import (
 	"github.com/PhenixChain/PhenixChain/client/keys"
 	sdk "github.com/PhenixChain/PhenixChain/types"
 	"github.com/PhenixChain/PhenixChain/x/auth"
-
-	"errors"
 
 	"github.com/spf13/viper"
 )
@@ -162,15 +161,16 @@ func (bldr TxBuilder) WithMemo(memo string) TxBuilder {
 	return bldr
 }
 
-// BuildSignMsg builds a single message to be signed from a TxBuilder given a set of
-// messages. It returns an error if a fee is supplied but cannot be parsed.
+// BuildSignMsg builds a single message to be signed from a TxBuilder given a
+// set of messages. It returns an error if a fee is supplied but cannot be
+// parsed.
 func (bldr TxBuilder) BuildSignMsg(msgs []sdk.Msg) (StdSignMsg, error) {
 	chainID := bldr.chainID
 	if chainID == "" {
 		return StdSignMsg{}, fmt.Errorf("chain ID required but not specified")
 	}
 
-	fees := bldr.fees
+	fees := sdk.Coins{}
 	if !bldr.gasPrices.IsZero() {
 		if !fees.IsZero() {
 			return StdSignMsg{}, errors.New("cannot provide both fees and gas prices")
@@ -204,12 +204,18 @@ func (bldr TxBuilder) Sign(name, passphrase string, msg StdSignMsg) ([]byte, err
 		return nil, err
 	}
 
-	return bldr.txEncoder(auth.NewStdTx(msg.Msgs, msg.Fee, []auth.StdSignature{sig}, msg.Memo))
+	tx := auth.StdTx{
+		Msgs:       msg.Msgs,
+		Fee:        msg.Fee,
+		Signatures: []auth.StdSignature{sig},
+		Memo:       msg.Memo,
+	}
+
+	return bldr.txEncoder(tx)
 }
 
 // BuildAndSign builds a single message to be signed, and signs a transaction
-// with the built message given a name, passphrase, and a set of
-// messages.
+// with the built message given a name, passphrase, and a set of messages.
 func (bldr TxBuilder) BuildAndSign(name, passphrase string, msgs []sdk.Msg) ([]byte, error) {
 	msg, err := bldr.BuildSignMsg(msgs)
 	if err != nil {
@@ -232,7 +238,7 @@ func (bldr TxBuilder) BuildTxForSim(msgs []sdk.Msg) ([]byte, error) {
 	return bldr.txEncoder(auth.NewStdTx(signMsg.Msgs, signMsg.Fee, sigs, signMsg.Memo))
 }
 
-// SignStdTx appends a signature to a StdTx and returns a copy of a it. If append
+// SignStdTx appends a signature to a StdTx and returns a copy of it. If append
 // is false, it replaces the signatures already attached with the new signature.
 func (bldr TxBuilder) SignStdTx(name, passphrase string, stdTx auth.StdTx, appendSig bool) (signedStdTx auth.StdTx, err error) {
 	stdSignature, err := MakeSignature(bldr.keybase, name, passphrase, StdSignMsg{
@@ -270,6 +276,7 @@ func MakeSignature(keybase crkeys.Keybase, name, passphrase string,
 	if err != nil {
 		return
 	}
+
 	return auth.StdSignature{
 		PubKey:    pubkey,
 		Signature: sigBytes,

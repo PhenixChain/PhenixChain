@@ -55,12 +55,12 @@ func NewNameServiceApp(logger log.Logger, db dbm.DB) *nameServiceApp {
 		BaseApp: bApp,
 		cdc:     cdc,
 
-		keyMain:          sdk.NewKVStoreKey("main"),
-		keyAccount:       sdk.NewKVStoreKey("acc"),
-		keyAddress:       sdk.NewKVStoreKey("address"),
-		keyFeeCollection: sdk.NewKVStoreKey("fee_collection"),
-		keyParams:        sdk.NewKVStoreKey("params"),
-		tkeyParams:       sdk.NewTransientStoreKey("transient_params"),
+		keyMain:          sdk.NewKVStoreKey(bam.MainStoreKey),
+		keyAccount:       sdk.NewKVStoreKey(auth.StoreKey),
+		keyAddress:       sdk.NewKVStoreKey(auth.StoreAdrKey),
+		keyFeeCollection: sdk.NewKVStoreKey(auth.FeeStoreKey),
+		keyParams:        sdk.NewKVStoreKey(params.StoreKey),
+		tkeyParams:       sdk.NewTransientStoreKey(params.TStoreKey),
 	}
 
 	// The ParamsKeeper handles parameter storage for the application
@@ -93,7 +93,11 @@ func NewNameServiceApp(logger log.Logger, db dbm.DB) *nameServiceApp {
 	// The app.Router is the main transaction router where each module registers its routes
 	// Register the bank routes here
 	app.Router().
-		AddRoute("bank", bank.NewHandler(app.bankKeeper))
+		AddRoute(bank.RouterKey, bank.NewHandler(app.bankKeeper))
+
+		// The app.QueryRouter is the main query router where each module registers its routes
+	app.QueryRouter().
+		AddRoute(auth.QuerierRoute, auth.NewQuerier(app.accountKeeper))
 
 	// The initChainer handles translating the genesis.json file into initial state for the network
 	app.SetInitChainer(app.initChainer)

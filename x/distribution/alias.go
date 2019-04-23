@@ -50,14 +50,23 @@ var (
 	NewMsgWithdrawDelegatorReward     = types.NewMsgWithdrawDelegatorReward
 	NewMsgWithdrawValidatorCommission = types.NewMsgWithdrawValidatorCommission
 
-	NewKeeper                           = keeper.NewKeeper
-	NewQuerier                          = keeper.NewQuerier
-	NewQueryValidatorCommissionParams   = keeper.NewQueryValidatorCommissionParams
-	NewQueryValidatorSlashesParams      = keeper.NewQueryValidatorSlashesParams
-	NewQueryDelegationRewardsParams     = keeper.NewQueryDelegationRewardsParams
-	NewQueryDelegatorParams             = keeper.NewQueryDelegatorParams
-	NewQueryDelegatorWithdrawAddrParams = keeper.NewQueryDelegatorWithdrawAddrParams
-	DefaultParamspace                   = keeper.DefaultParamspace
+	NewKeeper                                 = keeper.NewKeeper
+	NewQuerier                                = keeper.NewQuerier
+	NewQueryValidatorOutstandingRewardsParams = keeper.NewQueryValidatorOutstandingRewardsParams
+	NewQueryValidatorCommissionParams         = keeper.NewQueryValidatorCommissionParams
+	NewQueryValidatorSlashesParams            = keeper.NewQueryValidatorSlashesParams
+	NewQueryDelegationRewardsParams           = keeper.NewQueryDelegationRewardsParams
+	NewQueryDelegatorParams                   = keeper.NewQueryDelegatorParams
+	NewQueryDelegatorWithdrawAddrParams       = keeper.NewQueryDelegatorWithdrawAddrParams
+	DefaultParamspace                         = keeper.DefaultParamspace
+	RegisterInvariants                        = keeper.RegisterInvariants
+	AllInvariants                             = keeper.AllInvariants
+	NonNegativeOutstandingInvariant           = keeper.NonNegativeOutstandingInvariant
+	CanWithdrawInvariant                      = keeper.CanWithdrawInvariant
+	ReferenceCountInvariant                   = keeper.ReferenceCountInvariant
+	CreateTestInputDefault                    = keeper.CreateTestInputDefault
+	CreateTestInputAdvanced                   = keeper.CreateTestInputAdvanced
+	TestAddrs                                 = keeper.TestAddrs
 
 	RegisterCodec       = types.RegisterCodec
 	DefaultGenesisState = types.DefaultGenesisState

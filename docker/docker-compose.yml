@@ -1,0 +1,9 @@
+version: '3'
+services:
+  PhenixServer:
+    image: "phenix-server:v1.0"
+    container_name: phenixServer
+    volumes:
+      - ~/.phenix:/root/.phenix
+    ports:
+      - "26656-26657:26656-26657"

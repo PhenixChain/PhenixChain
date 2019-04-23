@@ -27,10 +27,11 @@ func (mc ModuleClient) GetQueryCmd() *cobra.Command {
 
 	distQueryCmd.AddCommand(client.GetCommands(
 		distCmds.GetCmdQueryParams(mc.storeKey, mc.cdc),
-		distCmds.GetCmdQueryOutstandingRewards(mc.storeKey, mc.cdc),
+		distCmds.GetCmdQueryValidatorOutstandingRewards(mc.storeKey, mc.cdc),
 		distCmds.GetCmdQueryValidatorCommission(mc.storeKey, mc.cdc),
 		distCmds.GetCmdQueryValidatorSlashes(mc.storeKey, mc.cdc),
 		distCmds.GetCmdQueryDelegatorRewards(mc.storeKey, mc.cdc),
+		distCmds.GetCmdQueryCommunityPool(mc.storeKey, mc.cdc),
 	)...)
 
 	return distQueryCmd

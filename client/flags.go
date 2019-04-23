@@ -18,11 +18,20 @@ const (
 	DefaultGasLimit      = 200000
 	GasFlagAuto          = "auto"
 
+	// BroadcastBlock defines a tx broadcasting mode where the client waits for
+	// the tx to be committed in a block.
+	BroadcastBlock = "block"
+	// BroadcastSync defines a tx broadcasting mode where the client waits for
+	// a CheckTx execution response only.
+	BroadcastSync = "sync"
+	// BroadcastAsync defines a tx broadcasting mode where the client returns
+	// immediately.
+	BroadcastAsync = "async"
+
 	FlagUseLedger          = "ledger"
 	FlagChainID            = "chain-id"
 	FlagNode               = "node"
 	FlagHeight             = "height"
-	FlagGas                = "gas"
 	FlagGasAdjustment      = "gas-adjustment"
 	FlagTrustNode          = "trust-node"
 	FlagFrom               = "from"
@@ -31,7 +40,7 @@ const (
 	FlagMemo               = "memo"
 	FlagFees               = "fees"
 	FlagGasPrices          = "gas-prices"
-	FlagAsync              = "async"
+	FlagBroadcastMode      = "broadcast-mode"
 	FlagPrintResponse      = "print-response"
 	FlagDryRun             = "dry-run"
 	FlagGenerateOnly       = "generate-only"
@@ -39,11 +48,8 @@ const (
 	FlagListenAddr         = "laddr"
 	FlagCORS               = "cors"
 	FlagMaxOpenConnections = "max-open"
-	FlagTLS                = "tls"
-	FlagSSLHosts           = "ssl-hosts"
-	FlagSSLCertFile        = "ssl-certfile"
-	FlagSSLKeyFile         = "ssl-keyfile"
 	FlagOutputDocument     = "output-document" // inspired by wget -O
+	FlagSkipConfirmation   = "yes"
 )
 
 // LineBreak can be included in a command list to provide a blank line
@@ -60,7 +66,6 @@ func GetCommands(cmds ...*cobra.Command) []*cobra.Command {
 		c.Flags().Bool(FlagTrustNode, false, "Trust connected full node (don't verify proofs for responses)")
 		c.Flags().Bool(FlagUseLedger, false, "Use a connected Ledger device")
 		c.Flags().String(FlagNode, "tcp://localhost:26657", "<host>:<port> to tendermint rpc interface for this chain")
-		c.Flags().Int64(FlagHeight, 0, "block height to query, omit to get most recent provable block")
 		viper.BindPFlag(FlagTrustNode, c.Flags().Lookup(FlagTrustNode))
 		viper.BindPFlag(FlagUseLedger, c.Flags().Lookup(FlagUseLedger))
 		viper.BindPFlag(FlagNode, c.Flags().Lookup(FlagNode))
@@ -75,21 +80,26 @@ func PostCommands(cmds ...*cobra.Command) []*cobra.Command {
 	for _, c := range cmds {
 		c.Flags().Bool(FlagIndentResponse, false, "Add indent to JSON response")
 		c.Flags().String(FlagFrom, "", "Name or address of private key with which to sign")
-		c.Flags().Uint64(FlagSequence, 0, "Sequence number to sign the tx")
+		c.Flags().Uint64P(FlagSequence, "s", 0, "The sequence number of the signing account (offline mode only)")
 		c.Flags().String(FlagMemo, "", "Memo to send along with transaction")
-		c.Flags().String(FlagFees, "", "Fees to pay along with transaction; eg: 10stake,1atom")
-		c.Flags().String(FlagGasPrices, "", "Gas prices to determine the transaction fee (e.g. 0.00001stake)")
+		c.Flags().String(FlagFees, "", "Fees to pay along with transaction; eg: 10uatom")
+		c.Flags().String(FlagGasPrices, "", "Gas prices to determine the transaction fee (e.g. 10uatom)")
 		c.Flags().String(FlagNode, "tcp://localhost:26657", "<host>:<port> to tendermint rpc interface for this chain")
 		c.Flags().Bool(FlagUseLedger, false, "Use a connected Ledger device")
 		c.Flags().Float64(FlagGasAdjustment, DefaultGasAdjustment, "adjustment factor to be multiplied against the estimate returned by the tx simulation; if the gas limit is set manually this flag is ignored ")
-		c.Flags().Bool(FlagAsync, false, "broadcast transactions asynchronously")
+		c.Flags().StringP(FlagBroadcastMode, "b", BroadcastSync, "Transaction broadcasting mode (sync|async|block)")
 		c.Flags().Bool(FlagPrintResponse, true, "return tx response (only works with async = false)")
 		c.Flags().Bool(FlagTrustNode, true, "Trust connected full node (don't verify proofs for responses)")
 		c.Flags().Bool(FlagDryRun, false, "ignore the --gas flag and perform a simulation of a transaction, but don't broadcast it")
 		c.Flags().Bool(FlagGenerateOnly, false, "build an unsigned transaction and write it to STDOUT")
+		c.Flags().BoolP(FlagSkipConfirmation, "y", false, "Skip tx broadcasting prompt confirmation")
+
 		// --gas can accept integers and "simulate"
 		c.Flags().Var(&GasFlagVar, "gas", fmt.Sprintf(
-			"gas limit to set per-transaction; set to %q to calculate required gas automatically (default %d)", GasFlagAuto, DefaultGasLimit))
+			"gas limit to set per-transaction; set to %q to calculate required gas automatically (default %d)",
+			GasFlagAuto, DefaultGasLimit,
+		))
+
 		viper.BindPFlag(FlagTrustNode, c.Flags().Lookup(FlagTrustNode))
 		viper.BindPFlag(FlagUseLedger, c.Flags().Lookup(FlagUseLedger))
 		viper.BindPFlag(FlagNode, c.Flags().Lookup(FlagNode))
@@ -103,10 +113,6 @@ func PostCommands(cmds ...*cobra.Command) []*cobra.Command {
 func RegisterRestServerFlags(cmd *cobra.Command) *cobra.Command {
 	cmd = GetCommands(cmd)[0]
 	cmd.Flags().String(FlagListenAddr, "tcp://localhost:1317", "The address for the server to listen on")
-	cmd.Flags().Bool(FlagTLS, false, "Enable SSL/TLS layer")
-	cmd.Flags().String(FlagSSLHosts, "", "Comma-separated hostnames and IPs to generate a certificate for")
-	cmd.Flags().String(FlagSSLCertFile, "", "Path to a SSL certificate file. If not supplied, a self-signed certificate will be generated.")
-	cmd.Flags().String(FlagSSLKeyFile, "", "Path to a key file; ignored if a certificate file is not supplied.")
 	cmd.Flags().String(FlagCORS, "", "Set the domains that can make CORS requests (* for all)")
 	cmd.Flags().Int(FlagMaxOpenConnections, 1000, "The number of maximum open connections")
 

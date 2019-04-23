@@ -3,14 +3,23 @@
 package rest
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/tendermint/tendermint/types"
+
 	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
+)
+
+const (
+	DefaultPage  = 1
+	DefaultLimit = 30 // should be consistent with tendermint/tendermint/rpc/core/pipe.go:19
 )
 
 // GasEstimateResponse defines a response definition for tx gas estimation.
@@ -22,7 +31,6 @@ type GasEstimateResponse struct {
 // that all share common "base" fields.
 type BaseReq struct {
 	From          string       `json:"from"`
-	Password      string       `json:"password"`
 	Memo          string       `json:"memo"`
 	ChainID       string       `json:"chain_id"`
 	Sequence      uint64       `json:"sequence"`
@@ -30,19 +38,17 @@ type BaseReq struct {
 	GasPrices     sdk.DecCoins `json:"gas_prices"`
 	Gas           string       `json:"gas"`
 	GasAdjustment string       `json:"gas_adjustment"`
-	GenerateOnly  bool         `json:"generate_only"`
 	Simulate      bool         `json:"simulate"`
 }
 
 // NewBaseReq creates a new basic request instance and sanitizes its values
 func NewBaseReq(
-	from, password, memo, chainID string, gas, gasAdjustment string,
-	seq uint64, fees sdk.Coins, gasPrices sdk.DecCoins, genOnly, simulate bool,
+	from, memo, chainID string, gas, gasAdjustment string, seq uint64,
+	fees sdk.Coins, gasPrices sdk.DecCoins, simulate bool,
 ) BaseReq {
 
 	return BaseReq{
 		From:          strings.TrimSpace(from),
-		Password:      password,
 		Memo:          strings.TrimSpace(memo),
 		ChainID:       strings.TrimSpace(chainID),
 		Fees:          fees,
@@ -50,7 +56,6 @@ func NewBaseReq(
 		Gas:           strings.TrimSpace(gas),
 		GasAdjustment: strings.TrimSpace(gasAdjustment),
 		Sequence:      seq,
-		GenerateOnly:  genOnly,
 		Simulate:      simulate,
 	}
 }
@@ -58,8 +63,8 @@ func NewBaseReq(
 // Sanitize performs basic sanitization on a BaseReq object.
 func (br BaseReq) Sanitize() BaseReq {
 	return NewBaseReq(
-		br.From, br.Password, br.Memo, br.ChainID, br.Gas, br.GasAdjustment,
-		br.Sequence, br.Fees, br.GasPrices, br.GenerateOnly, br.Simulate,
+		br.From, br.Memo, br.ChainID, br.Gas, br.GasAdjustment,
+		br.Sequence, br.Fees, br.GasPrices, br.Simulate,
 	)
 }
 
@@ -67,12 +72,8 @@ func (br BaseReq) Sanitize() BaseReq {
 // logic is needed, the implementing request handler should perform those
 // checks manually.
 func (br BaseReq) ValidateBasic(w http.ResponseWriter) bool {
-	if !br.GenerateOnly && !br.Simulate {
+	if !br.Simulate {
 		switch {
-		case len(br.Password) == 0:
-			WriteErrorResponse(w, http.StatusUnauthorized, "password required but not specified")
-			return false
-
 		case len(br.ChainID) == 0:
 			WriteErrorResponse(w, http.StatusUnauthorized, "chain-id required but not specified")
 			return false
@@ -89,8 +90,8 @@ func (br BaseReq) ValidateBasic(w http.ResponseWriter) bool {
 		}
 	}
 
-	if len(br.From) == 0 {
-		WriteErrorResponse(w, http.StatusUnauthorized, "name or address required but not specified")
+	if _, err := sdk.AccAddressFromBech32(br.From); err != nil || len(br.From) == 0 {
+		WriteErrorResponse(w, http.StatusUnauthorized, fmt.Sprintf("invalid from address: %s", br.From))
 		return false
 	}
 
@@ -117,13 +118,13 @@ func ReadRESTReq(w http.ResponseWriter, r *http.Request, cdc *codec.Codec, req i
 
 // ErrorResponse defines the attributes of a JSON error response.
 type ErrorResponse struct {
-	Code    int    `json:"code,omitempty"`
-	Message string `json:"message"`
+	Code  int    `json:"code,omitempty"`
+	Error string `json:"error"`
 }
 
 // NewErrorResponse creates a new ErrorResponse instance.
-func NewErrorResponse(code int, msg string) ErrorResponse {
-	return ErrorResponse{Code: code, Message: msg}
+func NewErrorResponse(code int, err string) ErrorResponse {
+	return ErrorResponse{Code: code, Error: err}
 }
 
 // WriteErrorResponse prepares and writes a HTTP error
@@ -198,6 +199,9 @@ func PostProcessResponse(w http.ResponseWriter, cdc *codec.Codec, response inter
 	var output []byte
 
 	switch response.(type) {
+	case []byte:
+		output = response.([]byte)
+
 	default:
 		var err error
 		if indent {
@@ -209,10 +213,58 @@ func PostProcessResponse(w http.ResponseWriter, cdc *codec.Codec, response inter
 			WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-	case []byte:
-		output = response.([]byte)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(output)
+}
+
+// ParseHTTPArgs parses the request's URL and returns a slice containing all arguments pairs.
+// It separates page and limit used for pagination
+func ParseHTTPArgs(r *http.Request) (tags []string, page, limit int, err error) {
+	tags = make([]string, 0, len(r.Form))
+	for key, values := range r.Form {
+		if key == "page" || key == "limit" {
+			continue
+		}
+		var value string
+		value, err = url.QueryUnescape(values[0])
+		if err != nil {
+			return tags, page, limit, err
+		}
+
+		var tag string
+		if key == types.TxHeightKey {
+			tag = fmt.Sprintf("%s=%s", key, value)
+		} else {
+			tag = fmt.Sprintf("%s='%s'", key, value)
+		}
+		tags = append(tags, tag)
+	}
+
+	pageStr := r.FormValue("page")
+	if pageStr == "" {
+		page = DefaultPage
+	} else {
+		page, err = strconv.Atoi(pageStr)
+		if err != nil {
+			return tags, page, limit, err
+		} else if page <= 0 {
+			return tags, page, limit, errors.New("page must greater than 0")
+		}
+	}
+
+	limitStr := r.FormValue("limit")
+	if limitStr == "" {
+		limit = DefaultLimit
+	} else {
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil {
+			return tags, page, limit, err
+		} else if limit <= 0 {
+			return tags, page, limit, errors.New("limit must greater than 0")
+		}
+	}
+
+	return tags, page, limit, nil
 }

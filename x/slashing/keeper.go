@@ -47,7 +47,16 @@ func (k Keeper) handleDoubleSign(ctx sdk.Context, addr crypto.Address, infractio
 	consAddr := sdk.ConsAddress(addr)
 	pubkey, err := k.getPubkey(ctx, addr)
 	if err != nil {
-		panic(fmt.Sprintf("Validator consensus-address %v not found", consAddr))
+		// Ignore evidence that cannot be handled.
+		// NOTE:
+		// We used to panic with:
+		// `panic(fmt.Sprintf("Validator consensus-address %v not found", consAddr))`,
+		// but this couples the expectations of the app to both Tendermint and
+		// the simulator.  Both are expected to provide the full range of
+		// allowable but none of the disallowed evidence types.  Instead of
+		// getting this coordination right, it is easier to relax the
+		// constraints and ignore evidence that cannot be handled.
+		return
 	}
 
 	// Reject evidence if the double-sign is too old
@@ -99,7 +108,7 @@ func (k Keeper) handleDoubleSign(ctx sdk.Context, addr crypto.Address, infractio
 
 	// Jail validator if not already jailed
 	// begin unbonding validator if not already unbonding (tombstone)
-	if !validator.GetJailed() {
+	if !validator.IsJailed() {
 		k.validatorSet.Jail(ctx, consAddr)
 	}
 
@@ -154,7 +163,7 @@ func (k Keeper) handleValidatorSignature(ctx sdk.Context, addr crypto.Address, p
 	}
 
 	if missed {
-		logger.Info(fmt.Sprintf("Absent validator %s at height %d, %d missed, threshold %d", addr, height, signInfo.MissedBlocksCounter, k.MinSignedPerWindow(ctx)))
+		logger.Info(fmt.Sprintf("Absent validator %s (%v) at height %d, %d missed, threshold %d", addr, pubkey, height, signInfo.MissedBlocksCounter, k.MinSignedPerWindow(ctx)))
 	}
 
 	minHeight := signInfo.StartHeight + k.SignedBlocksWindow(ctx)
@@ -163,7 +172,7 @@ func (k Keeper) handleValidatorSignature(ctx sdk.Context, addr crypto.Address, p
 	// if we are past the minimum height and the validator has missed too many blocks, punish them
 	if height > minHeight && signInfo.MissedBlocksCounter > maxMissed {
 		validator := k.validatorSet.ValidatorByConsAddr(ctx, consAddr)
-		if validator != nil && !validator.GetJailed() {
+		if validator != nil && !validator.IsJailed() {
 
 			// Downtime confirmed: slash and jail the validator
 			logger.Info(fmt.Sprintf("Validator %s past min height of %d and below signed blocks threshold of %d",

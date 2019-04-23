@@ -2,25 +2,20 @@ package keys
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"sort"
 
 	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/PhenixChain/PhenixChain/crypto/keys"
 	sdk "github.com/PhenixChain/PhenixChain/types"
-	"github.com/PhenixChain/PhenixChain/types/rest"
 
 	"errors"
 
-	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cosmos/go-bip39"
+	bip39 "github.com/cosmos/go-bip39"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/multisig"
@@ -36,7 +31,6 @@ const (
 	flagIndex       = "index"
 	flagMultisig    = "multisig"
 	flagNoSort      = "nosort"
-	defaultKeyPass  = "123456"
 )
 
 const (
@@ -79,6 +73,7 @@ the flag --nosort is set.
 	cmd.Flags().Bool(flagDryRun, false, "Perform action, but don't add key to local keystore")
 	cmd.Flags().Uint32(flagAccount, 0, "Account number for HD derivation")
 	cmd.Flags().Uint32(flagIndex, 0, "Address index number for HD derivation")
+	cmd.Flags().Bool(client.FlagIndentResponse, false, "Add indent to JSON response")
 	return cmd
 }
 
@@ -106,7 +101,7 @@ func runAddCmd(_ *cobra.Command, args []string) error {
 		// we throw this away, so don't enforce args,
 		// we want to get a new random seed phrase quickly
 		kb = keys.NewInMemory()
-		encryptPassword = defaultKeyPass
+		encryptPassword = "123456"
 	} else {
 		kb, err = NewKeyBaseFromHomeFlag()
 		if err != nil {
@@ -147,11 +142,11 @@ func runAddCmd(_ *cobra.Command, args []string) error {
 			}
 
 			pk := multisig.NewPubKeyMultisigThreshold(multisigThreshold, pks)
-			if _, err := kb.CreateOffline(name, pk); err != nil {
+			if _, err := kb.CreateMulti(name, pk); err != nil {
 				return err
 			}
 
-			fmt.Fprintf(os.Stderr, "Key %q saved to disk.", name)
+			fmt.Fprintf(os.Stderr, "Key %q saved to disk.\n", name)
 			return nil
 		}
 
@@ -221,7 +216,7 @@ func runAddCmd(_ *cobra.Command, args []string) error {
 	}
 
 	if !bip39.IsMnemonicValid(mnemonic) {
-		fmt.Fprintf(os.Stderr, "Error: Mnemonic is not valid")
+		fmt.Fprintf(os.Stderr, "Error: Mnemonic is not valid.\n")
 		return nil
 	}
 
@@ -247,7 +242,7 @@ func runAddCmd(_ *cobra.Command, args []string) error {
 		}
 	}
 
-	info, err := kb.CreateAccount(name, mnemonic, keys.DefaultBIP39Passphrase, encryptPassword, account, index)
+	info, err := kb.CreateAccount(name, mnemonic, bip39Passphrase, encryptPassword, account, index)
 	if err != nil {
 		return err
 	}
@@ -268,7 +263,7 @@ func printCreate(info keys.Info, showMnemonic bool, mnemonic string) error {
 	switch output {
 	case OutputFormatText:
 		fmt.Fprintln(os.Stderr)
-		printKeyInfo(info, Bech32KeyOutput)
+		printKeyInfo(info, keys.Bech32KeyOutput)
 
 		// print mnemonic unless requested not to.
 		if showMnemonic {
@@ -278,7 +273,7 @@ func printCreate(info keys.Info, showMnemonic bool, mnemonic string) error {
 			fmt.Fprintln(os.Stderr, mnemonic)
 		}
 	case OutputFormatJSON:
-		out, err := Bech32KeyOutput(info)
+		out, err := keys.Bech32KeyOutput(info)
 		if err != nil {
 			return err
 		}
@@ -303,182 +298,4 @@ func printCreate(info keys.Info, showMnemonic bool, mnemonic string) error {
 	}
 
 	return nil
-}
-
-/////////////////////////////
-// REST
-
-// function to just create a new seed to display in the UI before actually persisting it in the keybase
-func generateMnemonic(algo keys.SigningAlgo) string {
-	kb := keys.NewInMemory()
-	pass := defaultKeyPass
-	name := "inmemorykey"
-	_, seed, _ := kb.CreateMnemonic(name, keys.English, pass, algo)
-	return seed
-}
-
-// CheckAndWriteErrorResponse will check for errors and return
-// a given error message when corresponding
-//TODO: Move to utils/rest or similar
-func CheckAndWriteErrorResponse(w http.ResponseWriter, httpErr int, err error) bool {
-	if err != nil {
-		w.WriteHeader(httpErr)
-		_, _ = w.Write([]byte(err.Error()))
-		return true
-	}
-	return false
-}
-
-// add new key REST handler
-func AddNewKeyRequestHandler(indent bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var kb keys.Keybase
-		var m AddNewKey
-
-		kb, err := NewKeyBaseFromHomeFlag()
-		if CheckAndWriteErrorResponse(w, http.StatusInternalServerError, err) {
-			return
-		}
-
-		body, err := ioutil.ReadAll(r.Body)
-		if CheckAndWriteErrorResponse(w, http.StatusBadRequest, err) {
-			return
-		}
-
-		err = json.Unmarshal(body, &m)
-		if CheckAndWriteErrorResponse(w, http.StatusBadRequest, err) {
-			return
-		}
-
-		// Check parameters
-		if m.Name == "" {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errMissingName())
-			return
-		}
-		if m.Password == "" {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errMissingPassword())
-			return
-		}
-
-		mnemonic := m.Mnemonic
-		// if mnemonic is empty, generate one
-		if mnemonic == "" {
-			mnemonic = generateMnemonic(keys.Secp256k1)
-		}
-		if !bip39.IsMnemonicValid(mnemonic) {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errInvalidMnemonic())
-		}
-
-		if m.Index < 0 || m.Index > maxValidIndexalue {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errInvalidIndexNumber())
-			return
-		}
-
-		_, err = kb.Get(m.Name)
-		if err == nil {
-			CheckAndWriteErrorResponse(w, http.StatusConflict, errKeyNameConflict(m.Name))
-			return
-		}
-
-		// create account
-		account := uint32(m.Account)
-		index := uint32(m.Index)
-		info, err := kb.CreateAccount(m.Name, mnemonic, keys.DefaultBIP39Passphrase, m.Password, account, index)
-		if CheckAndWriteErrorResponse(w, http.StatusInternalServerError, err) {
-			return
-		}
-
-		keyOutput, err := Bech32KeyOutput(info)
-		if CheckAndWriteErrorResponse(w, http.StatusInternalServerError, err) {
-			return
-		}
-
-		keyOutput.Mnemonic = mnemonic
-
-		rest.PostProcessResponse(w, cdc, keyOutput, indent)
-	}
-}
-
-// Seed REST request handler
-func SeedRequestHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	algoType := vars["type"]
-
-	// algo type defaults to secp256k1
-	if algoType == "" {
-		algoType = "secp256k1"
-	}
-
-	algo := keys.SigningAlgo(algoType)
-	seed := generateMnemonic(algo)
-
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(seed))
-}
-
-// RecoverRequestHandler performs key recover request
-func RecoverRequestHandler(indent bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		name := vars["name"]
-		var m RecoverKey
-
-		body, err := ioutil.ReadAll(r.Body)
-		if CheckAndWriteErrorResponse(w, http.StatusBadRequest, err) {
-			return
-		}
-
-		err = cdc.UnmarshalJSON(body, &m)
-		if CheckAndWriteErrorResponse(w, http.StatusBadRequest, err) {
-			return
-		}
-
-		kb, err := NewKeyBaseFromHomeFlag()
-		CheckAndWriteErrorResponse(w, http.StatusInternalServerError, err)
-
-		if name == "" {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errMissingName())
-			return
-		}
-		if m.Password == "" {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errMissingPassword())
-			return
-		}
-
-		mnemonic := m.Mnemonic
-		if !bip39.IsMnemonicValid(mnemonic) {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errInvalidMnemonic())
-		}
-
-		if m.Mnemonic == "" {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errMissingMnemonic())
-			return
-		}
-
-		if m.Index < 0 || m.Index > maxValidIndexalue {
-			CheckAndWriteErrorResponse(w, http.StatusBadRequest, errInvalidIndexNumber())
-			return
-		}
-
-		_, err = kb.Get(name)
-		if err == nil {
-			CheckAndWriteErrorResponse(w, http.StatusConflict, errKeyNameConflict(name))
-			return
-		}
-
-		account := uint32(m.Account)
-		index := uint32(m.Index)
-
-		info, err := kb.CreateAccount(name, mnemonic, keys.DefaultBIP39Passphrase, m.Password, account, index)
-		if CheckAndWriteErrorResponse(w, http.StatusInternalServerError, err) {
-			return
-		}
-
-		keyOutput, err := Bech32KeyOutput(info)
-		if CheckAndWriteErrorResponse(w, http.StatusInternalServerError, err) {
-			return
-		}
-
-		rest.PostProcessResponse(w, cdc, keyOutput, indent)
-	}
 }

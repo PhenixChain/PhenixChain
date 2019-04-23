@@ -34,34 +34,40 @@ func (gs *Store) GetStoreType() types.StoreType {
 
 // Implements KVStore.
 func (gs *Store) Get(key []byte) (value []byte) {
-	gs.gasMeter.ConsumeGas(gs.gasConfig.ReadCostFlat, types.GasReadCostFlatDesc)
 	value = gs.parent.Get(key)
-
-	// TODO overflow-safe math?
-	gs.gasMeter.ConsumeGas(gs.gasConfig.ReadCostPerByte*types.Gas(len(value)), types.GasReadPerByteDesc)
-
+	if gs.gasMeter != nil {
+		gs.gasMeter.ConsumeGas(gs.gasConfig.ReadCostFlat, types.GasReadCostFlatDesc)
+		// TODO overflow-safe math?
+		gs.gasMeter.ConsumeGas(gs.gasConfig.ReadCostPerByte*types.Gas(len(value)), types.GasReadPerByteDesc)
+	}
 	return value
 }
 
 // Implements KVStore.
 func (gs *Store) Set(key []byte, value []byte) {
 	types.AssertValidValue(value)
-	gs.gasMeter.ConsumeGas(gs.gasConfig.WriteCostFlat, types.GasWriteCostFlatDesc)
-	// TODO overflow-safe math?
-	gs.gasMeter.ConsumeGas(gs.gasConfig.WriteCostPerByte*types.Gas(len(value)), types.GasWritePerByteDesc)
+	if gs.gasMeter != nil {
+		gs.gasMeter.ConsumeGas(gs.gasConfig.WriteCostFlat, types.GasWriteCostFlatDesc)
+		// TODO overflow-safe math?
+		gs.gasMeter.ConsumeGas(gs.gasConfig.WriteCostPerByte*types.Gas(len(value)), types.GasWritePerByteDesc)
+	}
 	gs.parent.Set(key, value)
 }
 
 // Implements KVStore.
 func (gs *Store) Has(key []byte) bool {
-	gs.gasMeter.ConsumeGas(gs.gasConfig.HasCost, types.GasHasDesc)
+	if gs.gasMeter != nil {
+		gs.gasMeter.ConsumeGas(gs.gasConfig.HasCost, types.GasHasDesc)
+	}
 	return gs.parent.Has(key)
 }
 
 // Implements KVStore.
 func (gs *Store) Delete(key []byte) {
-	// charge gas to prevent certain attack vectors even though space is being freed
-	gs.gasMeter.ConsumeGas(gs.gasConfig.DeleteCost, types.GasDeleteDesc)
+	if gs.gasMeter != nil {
+		// charge gas to prevent certain attack vectors even though space is being freed
+		gs.gasMeter.ConsumeGas(gs.gasConfig.DeleteCost, types.GasDeleteDesc)
+	}
 	gs.parent.Delete(key)
 }
 

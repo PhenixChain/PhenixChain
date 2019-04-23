@@ -3,12 +3,15 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
+
+	"github.com/spf13/viper"
 
 	"github.com/PhenixChain/PhenixChain/client"
 	"github.com/PhenixChain/PhenixChain/codec"
 
-	"github.com/tendermint/go-amino"
+	amino "github.com/tendermint/go-amino"
 	"github.com/tendermint/tendermint/libs/common"
 
 	"github.com/PhenixChain/PhenixChain/client/context"
@@ -40,8 +43,6 @@ func GenerateOrBroadcastMsgs(cliCtx context.CLIContext, txBldr authtxb.TxBuilder
 // QueryContext. It ensures that the account exists, has a proper number and
 // sequence set. In addition, it builds and signs a transaction with the
 // supplied messages. Finally, it broadcasts the signed transaction to a node.
-//
-// NOTE: Also see CompleteAndBroadcastTxREST.
 func CompleteAndBroadcastTxCLI(txBldr authtxb.TxBuilder, cliCtx context.CLIContext, msgs []sdk.Msg) error {
 	txBldr, err := PrepareTxBuilder(txBldr, cliCtx)
 	if err != nil {
@@ -64,6 +65,32 @@ func CompleteAndBroadcastTxCLI(txBldr authtxb.TxBuilder, cliCtx context.CLIConte
 		return nil
 	}
 
+	if !cliCtx.SkipConfirm {
+		stdSignMsg, err := txBldr.BuildSignMsg(msgs)
+		if err != nil {
+			return err
+		}
+
+		var js []byte
+		if viper.GetBool(client.FlagIndentResponse) {
+			js, err = cliCtx.Codec.MarshalJSONIndent(stdSignMsg, "", "  ")
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			js = cliCtx.Codec.MustMarshalJSON(stdSignMsg)
+		}
+
+		fmt.Fprintf(os.Stderr, "%s\n\n", js)
+
+		buf := client.BufferStdin()
+		ok, err := client.GetConfirmation("confirm transaction before signing and broadcasting", buf)
+		if err != nil || !ok {
+			fmt.Fprintf(os.Stderr, "%s\n", "cancelled transaction")
+			return err
+		}
+	}
+
 	passphrase, err := keys.GetPassphrase(fromName)
 	if err != nil {
 		return err
@@ -77,8 +104,11 @@ func CompleteAndBroadcastTxCLI(txBldr authtxb.TxBuilder, cliCtx context.CLIConte
 
 	// broadcast to a Tendermint node
 	res, err := cliCtx.BroadcastTx(txBytes)
-	cliCtx.PrintOutput(res)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return cliCtx.PrintOutput(res)
 }
 
 // EnrichWithGas calculates the gas estimate that would be consumed by the
@@ -93,7 +123,9 @@ func EnrichWithGas(txBldr authtxb.TxBuilder, cliCtx context.CLIContext, msgs []s
 
 // CalculateGas simulates the execution of a transaction and returns
 // both the estimate obtained by the query and the adjusted amount.
-func CalculateGas(queryFunc func(string, common.HexBytes) ([]byte, error), cdc *amino.Codec, txBytes []byte, adjustment float64) (estimate, adjusted uint64, err error) {
+func CalculateGas(queryFunc func(string, common.HexBytes) ([]byte, error),
+	cdc *amino.Codec, txBytes []byte, adjustment float64) (estimate, adjusted uint64, err error) {
+
 	// run a simulation (via /app/simulate query) to
 	// estimate gas and update TxBuilder accordingly
 	rawRes, err := queryFunc("/app/simulate", txBytes)
@@ -110,32 +142,41 @@ func CalculateGas(queryFunc func(string, common.HexBytes) ([]byte, error), cdc *
 
 // PrintUnsignedStdTx builds an unsigned StdTx and prints it to os.Stdout.
 // Don't perform online validation or lookups if offline is true.
-func PrintUnsignedStdTx(txBldr authtxb.TxBuilder, cliCtx context.CLIContext, msgs []sdk.Msg, offline bool) (err error) {
+func PrintUnsignedStdTx(
+	txBldr authtxb.TxBuilder, cliCtx context.CLIContext, msgs []sdk.Msg, offline bool,
+) (err error) {
+
 	var stdTx auth.StdTx
+
 	if offline {
 		stdTx, err = buildUnsignedStdTxOffline(txBldr, cliCtx, msgs)
 	} else {
 		stdTx, err = buildUnsignedStdTx(txBldr, cliCtx, msgs)
 	}
+
 	if err != nil {
 		return
 	}
+
 	json, err := cliCtx.Codec.MarshalJSON(stdTx)
 	if err == nil {
 		fmt.Fprintf(cliCtx.Output, "%s\n", json)
 	}
+
 	return
 }
 
-// SignStdTx appends a signature to a StdTx and returns a copy of a it. If appendSig
+// SignStdTx appends a signature to a StdTx and returns a copy of it. If appendSig
 // is false, it replaces the signatures already attached with the new signature.
 // Don't perform online validation or lookups if offline is true.
-func SignStdTx(txBldr authtxb.TxBuilder, cliCtx context.CLIContext, name string, stdTx auth.StdTx, appendSig bool, offline bool) (auth.StdTx, error) {
+func SignStdTx(
+	txBldr authtxb.TxBuilder, cliCtx context.CLIContext, name string,
+	stdTx auth.StdTx, appendSig bool, offline bool,
+) (auth.StdTx, error) {
+
 	var signedStdTx auth.StdTx
 
-	keybase := txBldr.Keybase()
-
-	info, err := keybase.Get(name)
+	info, err := txBldr.Keybase().Get(name)
 	if err != nil {
 		return signedStdTx, err
 	}
@@ -148,8 +189,7 @@ func SignStdTx(txBldr authtxb.TxBuilder, cliCtx context.CLIContext, name string,
 	}
 
 	if !offline {
-		txBldr, err = populateAccountFromState(
-			txBldr, cliCtx, sdk.AccAddress(addr))
+		txBldr, err = populateAccountFromState(txBldr, cliCtx, sdk.AccAddress(addr))
 		if err != nil {
 			return signedStdTx, err
 		}
@@ -190,17 +230,33 @@ func SignStdTxWithSignerAddress(txBldr authtxb.TxBuilder, cliCtx context.CLICont
 	return txBldr.SignStdTx(name, passphrase, stdTx, false)
 }
 
-func populateAccountFromState(txBldr authtxb.TxBuilder, cliCtx context.CLIContext,
-	addr sdk.AccAddress) (authtxb.TxBuilder, error) {
-	if txBldr.Sequence() == 0 {
-		accSeq, err := cliCtx.GetAccountSequence(addr)
-		if err != nil {
-			return txBldr, err
-		}
-		txBldr = txBldr.WithSequence(accSeq)
+// Read and decode a StdTx from the given filename.  Can pass "-" to read from stdin.
+func ReadStdTxFromFile(cdc *amino.Codec, filename string) (stdTx auth.StdTx, err error) {
+	var bytes []byte
+	if filename == "-" {
+		bytes, err = ioutil.ReadAll(os.Stdin)
+	} else {
+		bytes, err = ioutil.ReadFile(filename)
+	}
+	if err != nil {
+		return
+	}
+	if err = cdc.UnmarshalJSON(bytes, &stdTx); err != nil {
+		return
+	}
+	return
+}
+
+func populateAccountFromState(
+	txBldr authtxb.TxBuilder, cliCtx context.CLIContext, addr sdk.AccAddress,
+) (authtxb.TxBuilder, error) {
+
+	accSeq, err := cliCtx.GetAccountSequence(addr)
+	if err != nil {
+		return txBldr, err
 	}
 
-	return txBldr, nil
+	return txBldr.WithSequence(accSeq), nil
 }
 
 // GetTxEncoder return tx encoder from global sdk configuration if ones is defined.

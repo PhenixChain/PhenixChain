@@ -49,17 +49,24 @@ func registerQueryRoutes(cliCtx context.CLIContext, r *mux.Router,
 		validatorRewardsHandlerFn(cliCtx, cdc, queryRoute),
 	).Methods("GET")
 
+	// Outstanding rewards of a single validator
+	r.HandleFunc(
+		"/distribution/validators/{validatorAddr}/outstanding_rewards",
+		outstandingRewardsHandlerFn(cliCtx, cdc, queryRoute),
+	).Methods("GET")
+
 	// Get the current distribution parameter values
 	r.HandleFunc(
 		"/distribution/parameters",
 		paramsHandlerFn(cliCtx, cdc, queryRoute),
 	).Methods("GET")
 
-	// Get the current distribution pool
+	// Get the amount held in the community pool
 	r.HandleFunc(
-		"/distribution/outstanding_rewards",
-		outstandingRewardsHandlerFn(cliCtx, cdc, queryRoute),
+		"/distribution/community_pool",
+		communityPoolHandler(cliCtx, cdc, queryRoute),
 	).Methods("GET")
+
 }
 
 // HTTP request handler to query the total rewards balance from all delegations
@@ -118,7 +125,7 @@ func delegatorWithdrawalAddrHandlerFn(cliCtx context.CLIContext, cdc *codec.Code
 // ValidatorDistInfo defines the properties of
 // validator distribution information response.
 type ValidatorDistInfo struct {
-	OperatorAddress     sdk.AccAddress                       `json:"operator_addr"`
+	OperatorAddress     sdk.AccAddress                       `json:"operator_address"`
 	SelfBondRewards     sdk.DecCoins                         `json:"self_bond_rewards"`
 	ValidatorCommission types.ValidatorAccumulatedCommission `json:"val_commission"`
 }
@@ -206,12 +213,38 @@ func paramsHandlerFn(cliCtx context.CLIContext, cdc *codec.Codec,
 	}
 }
 
+func communityPoolHandler(cliCtx context.CLIContext, cdc *codec.Codec,
+	queryRoute string) http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		res, err := cliCtx.QueryWithData(fmt.Sprintf("custom/%s/community_pool", queryRoute), nil)
+		if err != nil {
+			rest.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		var result sdk.DecCoins
+		if err := cdc.UnmarshalJSON(res, &result); err != nil {
+			rest.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		rest.PostProcessResponse(w, cdc, result, cliCtx.Indent)
+	}
+}
+
 // HTTP request handler to query the outstanding rewards
 func outstandingRewardsHandlerFn(cliCtx context.CLIContext, cdc *codec.Codec,
 	queryRoute string) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		res, err := cliCtx.QueryWithData(fmt.Sprintf("custom/%s/outstanding_rewards", queryRoute), []byte{})
+		validatorAddr, ok := checkValidatorAddressVar(w, r)
+		if !ok {
+			return
+		}
+
+		bin := cdc.MustMarshalJSON(distribution.NewQueryValidatorOutstandingRewardsParams(validatorAddr))
+		res, err := cliCtx.QueryWithData(fmt.Sprintf("custom/%s/validator_outstanding_rewards", queryRoute), bin)
 		if err != nil {
 			rest.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
 			return
