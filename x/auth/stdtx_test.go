@@ -35,7 +35,6 @@ func TestStdTx(t *testing.T) {
 func TestStdSignBytes(t *testing.T) {
 	type args struct {
 		chainID  string
-		accnum   uint64
 		sequence uint64
 		fee      StdFee
 		msgs     []sdk.Msg
@@ -47,12 +46,12 @@ func TestStdSignBytes(t *testing.T) {
 		want string
 	}{
 		{
-			args{"1234", 3, 6, defaultFee, []sdk.Msg{sdk.NewTestMsg(addr)}, "memo"},
-			fmt.Sprintf("{\"account_number\":\"3\",\"chain_id\":\"1234\",\"fee\":{\"amount\":[{\"amount\":\"150\",\"denom\":\"atom\"}],\"gas\":\"50000\"},\"memo\":\"memo\",\"msgs\":[[\"%s\"]],\"sequence\":\"6\"}", addr),
+			args{"1234", 6, defaultFee, []sdk.Msg{sdk.NewTestMsg(addr)}, "memo"},
+			fmt.Sprintf("{\"chain_id\":\"1234\",\"fee\":{\"amount\":[{\"amount\":\"150\",\"denom\":\"atom\"}],\"gas\":\"50000\"},\"memo\":\"memo\",\"msgs\":[[\"%s\"]],\"sequence\":\"6\"}", addr),
 		},
 	}
 	for i, tc := range tests {
-		got := string(StdSignBytes(tc.args.chainID, tc.args.accnum, tc.args.sequence, tc.args.fee, tc.args.msgs, tc.args.memo))
+		got := string(StdSignBytes(tc.args.chainID, tc.args.sequence, tc.args.fee, tc.args.msgs, tc.args.memo))
 		require.Equal(t, tc.want, got, "Got unexpected result on test case i: %d", i)
 	}
 }
@@ -79,23 +78,23 @@ func TestTxValidateBasic(t *testing.T) {
 	// require to fail validation upon invalid fee
 	badFee := newStdFee()
 	badFee.Amount[0].Amount = sdk.NewInt(-5)
-	tx := newTestTx(ctx, nil, nil, nil, nil, badFee)
+	tx := newTestTx(ctx, nil, nil, nil, badFee)
 
 	err := tx.ValidateBasic()
 	require.Error(t, err)
 	require.Equal(t, sdk.CodeInsufficientFee, err.Result().Code)
 
 	// require to fail validation when no signatures exist
-	privs, accNums, seqs := []crypto.PrivKey{}, []uint64{}, []uint64{}
-	tx = newTestTx(ctx, msgs, privs, accNums, seqs, fee)
+	privs, seqs := []crypto.PrivKey{}, []uint64{}
+	tx = newTestTx(ctx, msgs, privs, seqs, fee)
 
 	err = tx.ValidateBasic()
 	require.Error(t, err)
 	require.Equal(t, sdk.CodeNoSignatures, err.Result().Code)
 
 	// require to fail validation when signatures do not match expected signers
-	privs, accNums, seqs = []crypto.PrivKey{priv1}, []uint64{0, 1}, []uint64{0, 0}
-	tx = newTestTx(ctx, msgs, privs, accNums, seqs, fee)
+	privs, seqs = []crypto.PrivKey{priv1}, []uint64{0, 0}
+	tx = newTestTx(ctx, msgs, privs, seqs, fee)
 
 	err = tx.ValidateBasic()
 	require.Error(t, err)
@@ -103,10 +102,10 @@ func TestTxValidateBasic(t *testing.T) {
 
 	// require to fail validation when there are too many signatures
 	privs = []crypto.PrivKey{priv1, priv2, priv3, priv4, priv5, priv6, priv7, priv8}
-	accNums, seqs = []uint64{0, 0, 0, 0, 0, 0, 0, 0}, []uint64{0, 0, 0, 0, 0, 0, 0, 0}
+	seqs = []uint64{0, 0, 0, 0, 0, 0, 0, 0}
 	badMsg := newTestMsg(addr1, addr2, addr3, addr4, addr5, addr6, addr7, addr8)
 	badMsgs := []sdk.Msg{badMsg}
-	tx = newTestTx(ctx, badMsgs, privs, accNums, seqs, fee)
+	tx = newTestTx(ctx, badMsgs, privs, seqs, fee)
 
 	err = tx.ValidateBasic()
 	require.Error(t, err)
@@ -115,15 +114,15 @@ func TestTxValidateBasic(t *testing.T) {
 	// require to fail with invalid gas supplied
 	badFee = newStdFee()
 	badFee.Gas = 9223372036854775808
-	tx = newTestTx(ctx, nil, nil, nil, nil, badFee)
+	tx = newTestTx(ctx, nil, nil, nil, badFee)
 
 	err = tx.ValidateBasic()
 	require.Error(t, err)
 	require.Equal(t, sdk.CodeGasOverflow, err.Result().Code)
 
 	// require to pass when above criteria are matched
-	privs, accNums, seqs = []crypto.PrivKey{priv1, priv2}, []uint64{0, 1}, []uint64{0, 0}
-	tx = newTestTx(ctx, msgs, privs, accNums, seqs, fee)
+	privs, seqs = []crypto.PrivKey{priv1, priv2}, []uint64{0, 0}
+	tx = newTestTx(ctx, msgs, privs, seqs, fee)
 
 	err = tx.ValidateBasic()
 	require.NoError(t, err)

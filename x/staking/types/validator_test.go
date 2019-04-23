@@ -3,7 +3,6 @@ package types
 import (
 	"testing"
 
-	"github.com/PhenixChain/PhenixChain/codec"
 	sdk "github.com/PhenixChain/PhenixChain/types"
 
 	"github.com/stretchr/testify/assert"
@@ -270,18 +269,6 @@ func TestPossibleOverflow(t *testing.T) {
 
 	require.False(t, newValidator.DelegatorShares.IsNegative())
 	require.False(t, newValidator.Tokens.IsNegative())
-}
-
-func TestValidatorMarshalUnmarshalJSON(t *testing.T) {
-	validator := NewValidator(addr1, pk1, Description{})
-	js, err := codec.Cdc.MarshalJSON(validator)
-	require.NoError(t, err)
-	require.NotEmpty(t, js)
-	require.Contains(t, string(js), "\"consensus_pubkey\":\"cosmosvalconspu")
-	got := &Validator{}
-	err = codec.Cdc.UnmarshalJSON(js, got)
-	assert.NoError(t, err)
-	assert.Equal(t, validator, *got)
 }
 
 func TestValidatorSetInitialCommission(t *testing.T) {
