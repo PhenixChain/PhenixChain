@@ -193,7 +193,7 @@ func TestTxDecoder(t *testing.T) {
 
 	app := newBaseApp(t.Name())
 	tx := newTxCounter(1, 0)
-	txBytes := codec.MustMarshalBinaryLengthPrefixed(tx)
+	txBytes, _ := codec.MarshalJSON(tx)
 
 	dTx, err := app.txDecoder(txBytes)
 	require.NoError(t, err)

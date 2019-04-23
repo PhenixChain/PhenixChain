@@ -51,17 +51,6 @@ func TestMsgSendValidation(t *testing.T) {
 	}
 }
 
-func TestMsgSendGetSignBytes(t *testing.T) {
-	addr1 := sdk.AccAddress([]byte("input"))
-	addr2 := sdk.AccAddress([]byte("output"))
-	coins := sdk.NewCoins(sdk.NewInt64Coin("atom", 10))
-	var msg = NewMsgSend(addr1, addr2, coins)
-	res := msg.GetSignBytes()
-
-	expected := `{"type":"cosmos-sdk/MsgSend","value":{"amount":[{"amount":"10","denom":"atom"}],"from_address":"cosmos1d9h8qat57ljhcm","to_address":"cosmos1da6hgur4wsmpnjyg"}}`
-	require.Equal(t, expected, string(res))
-}
-
 func TestMsgSendGetSigners(t *testing.T) {
 	var msg = NewMsgSend(sdk.AccAddress([]byte("input1")), sdk.AccAddress{}, sdk.NewCoins())
 	res := msg.GetSigners()
@@ -212,20 +201,6 @@ func TestMsgMultiSendValidation(t *testing.T) {
 			require.NotNil(t, err, "%d", i)
 		}
 	}
-}
-
-func TestMsgMultiSendGetSignBytes(t *testing.T) {
-	addr1 := sdk.AccAddress([]byte("input"))
-	addr2 := sdk.AccAddress([]byte("output"))
-	coins := sdk.NewCoins(sdk.NewInt64Coin("atom", 10))
-	var msg = MsgMultiSend{
-		Inputs:  []Input{NewInput(addr1, coins)},
-		Outputs: []Output{NewOutput(addr2, coins)},
-	}
-	res := msg.GetSignBytes()
-
-	expected := `{"type":"cosmos-sdk/MsgMultiSend","value":{"inputs":[{"address":"cosmos1d9h8qat57ljhcm","coins":[{"amount":"10","denom":"atom"}]}],"outputs":[{"address":"cosmos1da6hgur4wsmpnjyg","coins":[{"amount":"10","denom":"atom"}]}]}}`
-	require.Equal(t, expected, string(res))
 }
 
 func TestMsgMultiSendGetSigners(t *testing.T) {
