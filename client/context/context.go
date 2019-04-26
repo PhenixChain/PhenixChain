@@ -12,6 +12,7 @@ import (
 	"github.com/PhenixChain/PhenixChain/codec"
 	cryptokeys "github.com/PhenixChain/PhenixChain/crypto/keys"
 	"github.com/PhenixChain/PhenixChain/x/auth"
+	"github.com/pkg/errors"
 
 	"github.com/spf13/viper"
 
@@ -293,7 +294,7 @@ func GetFromFields(from string, genOnly bool) (sdk.AccAddress, string, error) {
 	if genOnly {
 		addr, err := sdk.AccAddressFromBech32(from)
 		if err != nil {
-			return nil, "", err
+			return nil, "", errors.Wrap(err, "must provide a valid Bech32 address for generate-only")
 		}
 
 		return addr, "", nil
